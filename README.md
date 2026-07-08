@@ -66,6 +66,7 @@ Reboot after switching.
 - A first-boot, idempotent Homebrew bundle service.
 - Dell XPS 9350 Intel profile files for fingerprint auth and Plymouth/refind initramfs customization.
 - Dell XPS 9350 Intel first-boot service to run `rpm-ostree initramfs-etc` on the installed host, because that command cannot run inside a container build.
+- Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked
 

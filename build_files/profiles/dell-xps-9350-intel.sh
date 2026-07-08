@@ -10,8 +10,14 @@ chmod 0755 /usr/libexec/purplefin/track-plymouth-initramfs
 echo ":: Ensuring fingerprint stack is present"
 dnf5 -y install fprintd libfprint
 
-echo ":: Enabling fingerprint authentication through authselect"
-authselect select local with-silent-lastlog with-mdns4 with-fingerprint --force
+echo ":: Ensuring security key stack is present"
+dnf5 -y install pam-u2f pamu2fcfg libfido2 opensc pcsc-lite yubikey-manager
+
+echo ":: Enabling fingerprint and optional U2F authentication through authselect"
+authselect select local with-silent-lastlog with-mdns4 with-fingerprint with-pam-u2f --force
+
+echo ":: Enabling smart card/security key socket"
+systemctl enable pcscd.socket
 
 echo ":: Enabling target-host Plymouth/refind initramfs tracking"
 systemctl enable purplefin-plymouth-initramfs.service
