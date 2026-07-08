@@ -1,0 +1,24 @@
+tap "valkyrie00/bbrew", trusted: true
+
+brew "atuin"
+brew "bash-preexec"
+brew "bat"
+brew "chezmoi"
+brew "direnv"
+brew "dysk"
+brew "eza"
+brew "fd"
+brew "gh"
+brew "mise"
+brew "podman-tui"
+brew "ripgrep"
+brew "starship"
+brew "tealdeer"
+brew "trash-cli"
+brew "ugrep"
+brew "uutils-coreutils"
+brew "yq"
+brew "zoxide"
+brew "valkyrie00/bbrew/bbrew", trusted: true
+
+cask "codex"

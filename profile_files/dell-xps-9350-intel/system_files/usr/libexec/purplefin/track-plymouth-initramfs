@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+marker="/var/lib/purplefin/plymouth-initramfs-tracked"
+
+if [[ -e "${marker}" ]]; then
+	exit 0
+fi
+
+if ! command -v rpm-ostree >/dev/null 2>&1; then
+	echo "rpm-ostree is unavailable; cannot track Plymouth files in initramfs" >&2
+	exit 0
+fi
+
+mapfile -d '' plymouth_files < <(find /etc/plymouth -type f -print0 | sort -z)
+if ((${#plymouth_files[@]} == 0)); then
+	echo "No Plymouth files found under /etc/plymouth" >&2
+	exit 0
+fi
+
+args=()
+for file in "${plymouth_files[@]}"; do
+	args+=("--track=${file}")
+done
+
+rpm-ostree initramfs-etc "${args[@]}"
+rpm-ostree initramfs-etc --force-sync
+
+install -d /var/lib/purplefin
+touch "${marker}"
+systemctl disable purplefin-plymouth-initramfs.service || true
+
+cat >&2 <<'MSG'
+Purplefin Plymouth files have been tracked into the initramfs.
+Reboot to use the new deployment.
+MSG

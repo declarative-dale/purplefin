@@ -1,0 +1,74 @@
+name: Build Purplefin
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: generic-x86_64
+            tags: generic-x86_64 latest
+          - profile: dell-xps-9350-intel
+            tags: dell-xps-9350-intel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ matrix.tags }}
+          containerfiles: ./Containerfile
+          build-args: |
+            BUILD_PROFILE=${{ matrix.profile }}
+            BASE_IMAGE=ghcr.io/ublue-os/bluefin
+            BASE_TAG=stable
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        id: push
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image tags
+        if: github.event_name != 'pull_request'
+        run: |
+          for tag in ${{ matrix.tags }}; do
+            cosign sign --yes "${REGISTRY}/${IMAGE_NAME}:${tag}"
+          done

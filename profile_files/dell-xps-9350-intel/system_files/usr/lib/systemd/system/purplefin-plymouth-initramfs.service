@@ -1,0 +1,12 @@
+[Unit]
+Description=Track Dell XPS Plymouth files in initramfs
+After=rpm-ostreed.service
+ConditionPathExists=/etc/plymouth/plymouthd.conf
+ConditionPathExists=!/var/lib/purplefin/plymouth-initramfs-tracked
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/purplefin/track-plymouth-initramfs
+
+[Install]
+WantedBy=multi-user.target
