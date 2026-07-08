@@ -20,7 +20,7 @@ laptop-specific hardware behavior.
 | Profile | Purpose |
 | --- | --- |
 | `generic-x86_64` | Common public x86_64 image with Purplefin packages, Flatpak preinstalls, and Homebrew bundle setup. |
-| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, and optional PAM U2F support for security keys. |
+| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, rEFInd theming, and optional PAM U2F support for security keys. |
 
 The default profile is `generic-x86_64`.
 
@@ -68,9 +68,11 @@ available after the reboot into that staged deployment.
 - System Flatpak preinstall manifest generated from this laptop.
 - Homebrew `Brewfile` generated from this laptop.
 - A first-boot, idempotent Homebrew bundle service.
+- Vates planet boot and GDM login branding over the inherited Bluefin/Fedora boot/login logo assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
+- Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
 - Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked

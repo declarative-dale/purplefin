@@ -6,6 +6,10 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
+chmod 0755 /usr/libexec/purplefin/install-refind-theme
+
+echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
+systemctl enable purplefin-refind-theme.service
 
 echo ":: Ensuring 1Password CLI is present"
 dnf5 -y --disable-repo=terra install 1password-cli
