@@ -6,6 +6,11 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
+chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
+chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/30-dell-ipu7-build-deps
+chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/40-dell-ipu7-dkms-userspace
+chmod 0755 /usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
+chmod 0755 /usr/libexec/purplefin/dell-ipu7-setup
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"

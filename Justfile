@@ -11,15 +11,21 @@ check:
 
     tmpdir="$(mktemp -d)"
     refind_tmp="$(mktemp -d)"
-    trap 'rm -rf "${tmpdir}" "${refind_tmp}"' EXIT
+    ipu7_psys_tmp="$(mktemp)"
+    trap 'rm -rf "${tmpdir}" "${refind_tmp}" "${ipu7_psys_tmp}"' EXIT
     cp -a system_files/. "${tmpdir}/"
     cp -a profile_files/dell-xps-9350-intel/system_files/. "${tmpdir}/"
     install -d "${tmpdir}/usr/lib/systemd/system"
+    install -d "${tmpdir}/usr/bin" "${tmpdir}/usr/sbin"
+    printf '%s\n' '#!/usr/bin/env sh' 'exit 0' > "${tmpdir}/usr/bin/true"
+    cp "${tmpdir}/usr/bin/true" "${tmpdir}/usr/sbin/modprobe"
+    chmod 0755 "${tmpdir}/usr/bin/true" "${tmpdir}/usr/sbin/modprobe"
     printf '%s\n' '[Unit]' 'Description=System Initialization' > "${tmpdir}/usr/lib/systemd/system/sysinit.target"
     printf '%s\n' '[Unit]' 'Description=Local File Systems' > "${tmpdir}/usr/lib/systemd/system/local-fs.target"
     printf '%s\n' '[Unit]' 'Description=Basic System' 'Requires=sysinit.target' 'After=sysinit.target' > "${tmpdir}/usr/lib/systemd/system/basic.target"
     printf '%s\n' '[Unit]' 'Description=Multi-User System' 'Requires=basic.target' 'After=basic.target' > "${tmpdir}/usr/lib/systemd/system/multi-user.target"
-    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-refind-theme.service
+    printf '%s\n' '[Unit]' 'Description=udev settle stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-udev-settle.service"
+    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-psys-load.service
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
@@ -48,11 +54,25 @@ check:
     done
     grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
+    test -z "$(find system_files -iname '*ipu7*' -print -quit)"
     test ! -e system_files/etc/yum.repos.d/1password.repo
     test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test -f profile_files/dell-xps-9350-intel/system_files/etc/yum.repos.d/1password.repo
     test ! -e profile_files/dell-xps-9350-intel/system_files/etc/plymouth
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/30-dell-ipu7-build-deps
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/40-dell-ipu7-dkms-userspace
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/system/purplefin-dell-ipu7-psys-load.service
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/user/pipewire.service.d/10-purplefin-dell-ipu7-libcamera.conf
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/user/purplefin-dell-ipu7-v4l2loopback.service
+    test -L profile_files/dell-xps-9350-intel/system_files/etc/systemd/user/default.target.wants/purplefin-dell-ipu7-v4l2loopback.service
+    test -f profile_files/dell-xps-9350-intel/system_files/etc/modules-load.d/purplefin-dell-ipu7.conf
+    grep -qF '0cab74a6146cdc094e90a408fc608773c350da0f' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    grep -qF 'debugfs_create_dir("ipu7-psys", NULL)' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-vates-plymouth-initramfs
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/install-refind-theme
     test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/system/purplefin-refind-theme.service
@@ -70,6 +90,33 @@ check:
     test -z "${unexpected_refind_distro_icon}"
     grep -qx 'icons_dir themes/rEFInd-Regular-Dark/icons' profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/refind/themes/rEFInd-Regular-Dark/theme.conf
     ! grep -q '^menuentry ' profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/refind/themes/rEFInd-Regular-Dark/theme.conf
+
+    # shellcheck source=/dev/null
+    source profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
+    for kernel_release in 7.1.0-100.fc99.x86_64 7.1.9-200.fc99.x86_64; do
+        purplefin_dell_ipu7_kernel_supported "${kernel_release}"
+    done
+    for kernel_release in 6.17.9-200.fc99.x86_64 7.0.0-100.fc99.x86_64 7.0.18-200.fc99.x86_64 7.2.0-100.fc99.x86_64 7.1.0-0.rc1.fc99.x86_64 7.10.0-100.fc99.x86_64; do
+        ! purplefin_dell_ipu7_kernel_supported "${kernel_release}"
+    done
+    selected_kernel="$(printf '%s\n' '7.0.18-200.fc99' '7.1.2-200.fc99' '7.1.0-0.rc1.fc99' '7.2.0-100.fc99' | purplefin_dell_ipu7_select_kernel_evr)"
+    test "${selected_kernel}" = '7.1.2-200.fc99'
+    if printf '%s\n' '7.0.18-200.fc99' '7.1.0-0.rc1.fc99' | purplefin_dell_ipu7_select_kernel_evr >/dev/null; then
+        echo "Dell IPU7 kernel selector accepted a non-stable-7.1 kernel" >&2
+        exit 1
+    fi
+
+    psys_patcher="profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs"
+    old_psys_line=$'\tdir = debugfs_create_dir("psys", psys->adev->isp->ipu7_dir);'
+    new_psys_line=$'\tdir = debugfs_create_dir("ipu7-psys", NULL);'
+    printf '%s\n' 'static int ipu7_psys_init_debugfs(void)' "${old_psys_line}" > "${ipu7_psys_tmp}"
+    "${psys_patcher}" "${ipu7_psys_tmp}" >/dev/null 2>&1
+    grep -Fqx "${new_psys_line}" "${ipu7_psys_tmp}"
+    printf '%s\n' 'dir = debugfs_create_dir("psys", NULL);' > "${ipu7_psys_tmp}"
+    if "${psys_patcher}" "${ipu7_psys_tmp}" >/dev/null 2>&1; then
+        echo "PSYS patcher accepted an unexpected upstream debugfs line" >&2
+        exit 1
+    fi
 
     refind_installer="profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/install-refind-theme"
     refind_theme_source="profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/refind/themes/rEFInd-Regular-Dark"

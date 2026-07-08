@@ -1,0 +1,18 @@
+[Unit]
+Description=Dell IPU7 v4l2loopback camera fallback
+After=pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Environment=LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib
+Environment=LIBCAMERA_PLUGIN_PATH=/usr/local/lib64/libcamera:/usr/local/lib/libcamera
+Environment=LIBCAMERA_IPA_MODULE_PATH=/usr/local/lib64/libcamera:/usr/local/lib/libcamera
+Environment=LIBCAMERA_LOG_LEVELS=IPU7:0
+ExecCondition=/usr/bin/test ! -e /dev/ipu7-psys0
+ExecStartPre=/usr/bin/test -e /dev/video33
+ExecStart=/usr/bin/gst-launch-1.0 -e libcamerasrc ! videoconvert ! videoflip method=rotate-180 ! v4l2sink device=/dev/video33 sync=false
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

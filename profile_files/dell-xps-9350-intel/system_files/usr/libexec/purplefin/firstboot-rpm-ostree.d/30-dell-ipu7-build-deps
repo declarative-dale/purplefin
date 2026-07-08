@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=/usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh
+source /usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh
+# shellcheck source=/usr/libexec/purplefin/lib/dell-ipu7.sh
+source /usr/libexec/purplefin/lib/dell-ipu7.sh
+
+purplefin_dell_ipu7_assert_booted_kernel
+
+packages=(
+	git
+	rsync
+	dkms
+	gcc
+	gcc-c++
+	clang
+	llvm
+	make
+	patch
+	perl
+	kernel-devel-matched
+	kernel-headers
+	meson
+	ninja-build
+	pkgconf-pkg-config
+	python3
+	python3-jinja2
+	python3-ply
+	python3-yaml
+	cmake
+	boost-devel
+	glib2-devel
+	gnutls-devel
+	gstreamer1
+	gstreamer1-devel
+	gstreamer1-plugins-base
+	gstreamer1-plugins-base-devel
+	gstreamer1-plugins-good
+	gstreamer1-plugins-bad-free
+	libcamera
+	libcamera-devel
+	libcamera-gstreamer
+	libevent-devel
+	libudev-devel
+	libyaml-devel
+	openssl-devel
+	pipewire
+	pipewire-devel
+	systemd-devel
+	v4l2loopback
+)
+
+purplefin_firstboot_log "staging Dell IPU7 DKMS, libcamera, PipeWire, GStreamer, kernel-devel, and v4l2loopback build dependencies"
+run_rpm_ostree install --idempotent "${packages[@]}"
+purplefin_firstboot_log "Dell IPU7 build dependencies have been staged; reboot before compiling DKMS modules and libcamera"

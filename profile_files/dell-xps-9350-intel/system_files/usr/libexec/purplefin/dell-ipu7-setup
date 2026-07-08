@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=/usr/libexec/purplefin/lib/dell-ipu7.sh
+source /usr/libexec/purplefin/lib/dell-ipu7.sh
+
+IPU7_CAMERA_REPO="${PURPLEFIN_DELL_IPU7_CAMERA_REPO:-https://github.com/jibsta210/ipu7-camera-linux.git}"
+IPU7_CAMERA_REF="${PURPLEFIN_DELL_IPU7_CAMERA_REF:-0cab74a6146cdc094e90a408fc608773c350da0f}"
+IPU7_DRIVERS_REPO="${PURPLEFIN_DELL_IPU7_DRIVERS_REPO:-https://github.com/intel/ipu7-drivers.git}"
+IPU7_DRIVERS_REF="${PURPLEFIN_DELL_IPU7_DRIVERS_REF:-main}"
+LIBCAMERA_REPO="${PURPLEFIN_DELL_IPU7_LIBCAMERA_REPO:-https://github.com/libcamera-org/libcamera.git}"
+LIBCAMERA_REF="${PURPLEFIN_DELL_IPU7_LIBCAMERA_REF:-master}"
+
+state_dir="${PURPLEFIN_DELL_IPU7_STATE_DIR:-/var/lib/purplefin/dell-ipu7}"
+src_dir="${state_dir}/src"
+camera_checkout="${src_dir}/ipu7-camera-linux"
+drivers_checkout="${src_dir}/ipu7-drivers"
+libcamera_checkout="${src_dir}/libcamera"
+
+fail() {
+	purplefin_dell_ipu7_log "$*"
+	exit 1
+}
+
+require_root() {
+	if ((EUID != 0)); then
+		fail "Dell IPU7 setup must run as root"
+	fi
+}
+
+require_commands() {
+	local command
+
+	for command in git rsync dkms make clang meson ninja sed awk grep sort head ldconfig depmod; do
+		command -v "${command}" >/dev/null 2>&1 || fail "${command} is required for Dell IPU7 setup"
+	done
+}
+
+clone_or_checkout() {
+	local repo="$1"
+	local ref="$2"
+	local directory="$3"
+
+	install -d -m 0755 "$(dirname "${directory}")"
+	if [[ ! -d "${directory}/.git" ]]; then
+		rm -rf "${directory}"
+		git init "${directory}"
+		git -C "${directory}" remote add origin "${repo}"
+	fi
+
+	if ! git -C "${directory}" fetch --depth 1 origin "${ref}"; then
+		git -C "${directory}" fetch origin "${ref}"
+	fi
+	git -C "${directory}" checkout --detach FETCH_HEAD
+}
+
+copy_tree() {
+	local source="$1"
+	local target="$2"
+
+	install -d -m 0755 "${target}"
+	rsync -a --delete "${source}/" "${target}/"
+}
+
+assert_ipu7_firmware_present() {
+	if compgen -G "/usr/lib/firmware/intel/ipu/*.bin" >/dev/null ||
+		compgen -G "/lib/firmware/intel/ipu/*.bin" >/dev/null; then
+		return 0
+	fi
+
+	if [[ "${PURPLEFIN_DELL_IPU7_ALLOW_MISSING_FIRMWARE:-0}" == "1" ]]; then
+		purplefin_dell_ipu7_log "IPU7 firmware was not found; continuing because PURPLEFIN_DELL_IPU7_ALLOW_MISSING_FIRMWARE=1"
+		return 0
+	fi
+
+	fail "IPU7 firmware is missing. Intel documents firmware in intel/ipu7-camera-bins, but this first-boot task cannot persistently copy proprietary firmware into /usr/lib/firmware on rpm-ostree. Layer a Fedora-compatible firmware package, then rerun this task; set PURPLEFIN_DELL_IPU7_ALLOW_MISSING_FIRMWARE=1 only for driver-only testing."
+}
+
+install_module_configs() {
+	install -D -m 0644 "${camera_checkout}/ipu7-usbio-order.conf" /etc/modprobe.d/ipu7-usbio-order.conf
+	install -D -m 0644 "${camera_checkout}/v4l2loopback.conf" /etc/modprobe.d/v4l2loopback.conf
+	install -D -m 0644 /dev/stdin /etc/ld.so.conf.d/purplefin-dell-ipu7-libcamera.conf <<'EOF'
+/usr/local/lib64
+/usr/local/lib
+EOF
+}
+
+dkms_reinstall() {
+	local module="$1"
+	local version="$2"
+	local kernel_release
+
+	kernel_release="$(uname -r)"
+	dkms remove -m "${module}" -v "${version}" --all >/dev/null 2>&1 || true
+	dkms add -m "${module}" -v "${version}"
+	dkms build -m "${module}" -v "${version}" -k "${kernel_release}"
+	dkms install --force -m "${module}" -v "${version}" -k "${kernel_release}"
+}
+
+install_cvs_dkms() {
+	local version="0.0.0_${IPU7_CAMERA_REF:0:7}"
+	local source_dir="/usr/src/intel_cvs-${version}"
+
+	copy_tree "${camera_checkout}/vision-drivers" "${source_dir}"
+	cat >"${source_dir}/dkms.conf" <<'EOF'
+PACKAGE_NAME="intel_cvs"
+PACKAGE_VERSION="#VERSION#"
+
+MAKE="make CC=clang LLVM=1 KERNELRELEASE=$kernelver KERNEL_SRC=$kernel_source_dir"
+CLEAN="make KERNELRELEASE=$kernelver KERNEL_SRC=$kernel_source_dir clean"
+
+BUILT_MODULE_NAME[0]="intel_cvs"
+DEST_MODULE_LOCATION[0]="/updates"
+
+AUTOINSTALL="yes"
+EOF
+	sed -i "s/#VERSION#/${version}/" "${source_dir}/dkms.conf"
+
+	purplefin_dell_ipu7_log "building intel_cvs DKMS module ${version}"
+	dkms_reinstall intel_cvs "${version}"
+}
+
+install_psys_dkms() {
+	local drivers_commit version source_dir psys_source
+
+	drivers_commit="$(git -C "${drivers_checkout}" rev-parse --short HEAD)"
+	version="0.0.0_${drivers_commit}"
+	psys_source="${drivers_checkout}/drivers/media/pci/intel/ipu7/psys/ipu-psys.c"
+	source_dir="/usr/src/intel_ipu7_psys-${version}"
+
+	/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs "${psys_source}"
+	copy_tree "${drivers_checkout}" "${source_dir}"
+	cat >"${source_dir}/dkms.conf" <<'EOF'
+PACKAGE_NAME="intel_ipu7_psys"
+PACKAGE_VERSION="#VERSION#"
+
+MAKE="make CC=clang LLVM=1 KERNELRELEASE=$kernelver KERNEL_SRC=$kernel_source_dir"
+CLEAN="make KERNELRELEASE=$kernelver KERNEL_SRC=$kernel_source_dir clean"
+
+BUILT_MODULE_NAME[0]="intel-ipu7-psys"
+BUILT_MODULE_LOCATION[0]="drivers/media/pci/intel/ipu7/psys"
+DEST_MODULE_LOCATION[0]="/updates"
+
+AUTOINSTALL="yes"
+EOF
+	sed -i "s/#VERSION#/${version}/" "${source_dir}/dkms.conf"
+
+	purplefin_dell_ipu7_log "building patched intel_ipu7_psys DKMS module ${version}"
+	dkms_reinstall intel_ipu7_psys "${version}"
+}
+
+inject_ipu7_pipeline() {
+	local pipeline_target="${libcamera_checkout}/src/libcamera/pipeline/ipu7"
+	local meson_options="${libcamera_checkout}/meson_options.txt"
+	local meson_build="${libcamera_checkout}/meson.build"
+
+	rm -rf "${pipeline_target}"
+	copy_tree "${camera_checkout}/libcamera-pipeline" "${pipeline_target}"
+
+	if ! grep -q "'ipu7'" "${meson_options}"; then
+		sed -i "s/'ipu3',/'ipu3', 'ipu7',/" "${meson_options}"
+	fi
+	if ! grep -q "'ipu7'" "${meson_options}"; then
+		fail "failed to add ipu7 to libcamera meson_options.txt pipeline choices"
+	fi
+
+	if ! grep -q "'ipu7':" "${meson_build}"; then
+		if grep -q "'ipu3': arch_x86," "${meson_build}"; then
+			sed -i "/'ipu3': arch_x86,/a\\    'ipu7': arch_x86," "${meson_build}"
+		else
+			sed -i "s/'simple': \\['any'\\],/'ipu7': arch_x86,\\n    'simple': ['any'],/" "${meson_build}"
+		fi
+	fi
+	if ! grep -q "'ipu7':" "${meson_build}"; then
+		fail "failed to add ipu7 to libcamera meson.build pipeline support"
+	fi
+}
+
+build_libcamera() {
+	clone_or_checkout "${LIBCAMERA_REPO}" "${LIBCAMERA_REF}" "${libcamera_checkout}"
+	inject_ipu7_pipeline
+
+	rm -rf "${libcamera_checkout}/build"
+	purplefin_dell_ipu7_log "building libcamera with IPU7 pipeline into /usr/local"
+	CC=clang CXX=clang++ meson setup "${libcamera_checkout}/build" "${libcamera_checkout}" \
+		--prefix=/usr/local \
+		--libdir=lib64 \
+		-Dpipelines=ipu7,uvcvideo,simple \
+		-Ddocumentation=disabled \
+		-Dtest=false \
+		-Dpycamera=disabled \
+		-Dqcam=disabled \
+		-Dlc-compliance=disabled \
+		-Dcam=enabled \
+		-Dgstreamer=enabled \
+		-Dv4l2=enabled
+	ninja -C "${libcamera_checkout}/build"
+	ninja -C "${libcamera_checkout}/build" install
+	ldconfig
+}
+
+enable_runtime_units() {
+	depmod -a "$(uname -r)"
+	systemctl daemon-reload
+	systemctl enable purplefin-dell-ipu7-psys-load.service
+}
+
+main() {
+	require_root
+	require_commands
+	purplefin_dell_ipu7_assert_booted_kernel
+
+	install -d -m 0755 "${src_dir}"
+	clone_or_checkout "${IPU7_CAMERA_REPO}" "${IPU7_CAMERA_REF}" "${camera_checkout}"
+	clone_or_checkout "${IPU7_DRIVERS_REPO}" "${IPU7_DRIVERS_REF}" "${drivers_checkout}"
+
+	install_module_configs
+	assert_ipu7_firmware_present
+	install_cvs_dkms
+	install_psys_dkms
+	build_libcamera
+	enable_runtime_units
+}
+
+main "$@"
