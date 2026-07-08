@@ -30,13 +30,17 @@ check:
     grep -qx 'right-click-action = paste' system_files/etc/skel/.config/ghostty/config.ghostty
     test ! -e system_files/etc/xdg/xdg-terminals.list
     test ! -e system_files/etc/xdg/gnome-xdg-terminals.list
+    grep -qx 'excludepkgs=1password\*' system_files/etc/yum.repos.d/terra.repo
     test -f profile_files/dell-xps-9350-intel/system_files/etc/plymouth/plymouthd.conf
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test ! -e system_files/etc/yum.repos.d/1password.repo
-    test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop
+    test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test -f profile_files/dell-xps-9350-intel/system_files/etc/yum.repos.d/1password.repo
-    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop
-    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-plymouth-initramfs
+    grep -qx 'Theme=purplefin-vates' profile_files/dell-xps-9350-intel/system_files/etc/plymouth/plymouthd.conf
+    test -f profile_files/dell-xps-9350-intel/system_files/etc/plymouth/themes/purplefin-vates/purplefin-vates.plymouth
+    test -f profile_files/dell-xps-9350-intel/system_files/etc/plymouth/themes/purplefin-vates/watermark.png
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-vates-plymouth-initramfs
 
 build-generic:
     podman build --build-arg BUILD_PROFILE=generic-x86_64 --tag {{image}}:generic-x86_64 .

@@ -5,11 +5,13 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-plymouth-initramfs
+chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
+chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-vates-plymouth-initramfs
 
 echo ":: Ensuring 1Password CLI is present"
 dnf5 -y --disable-repo=terra install 1password-cli
+rpm -q 1password-cli
+command -v op >/dev/null
 
 echo ":: Ensuring fingerprint stack is present"
 dnf5 -y install fprintd libfprint
@@ -23,4 +25,4 @@ authselect select local with-silent-lastlog with-mdns4 with-fingerprint with-pam
 echo ":: Enabling smart card/security key socket"
 systemctl enable pcscd.socket
 
-echo ":: Dell Plymouth/refind initramfs tracking will run through purplefin-firstboot-rpm-ostree.service"
+echo ":: Dell Plymouth initramfs tracking will run through purplefin-firstboot-rpm-ostree.service"

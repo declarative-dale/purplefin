@@ -1,12 +1,12 @@
 [Plymouth Theme]
-Name=Bluefin Custom
-Description=Spinner theme with custom Bluefin boot logo.
+Name=Purplefin Vates
+Description=Spinner theme with Vates boot logo.
 ModuleName=two-step
 
 [two-step]
 Font=Cantarell 12
 TitleFont=Cantarell Light 30
-ImageDir=/etc/plymouth/themes/bluefin-refind
+ImageDir=/etc/plymouth/themes/purplefin-vates
 DialogHorizontalAlignment=.5
 DialogVerticalAlignment=.382
 TitleHorizontalAlignment=.5
