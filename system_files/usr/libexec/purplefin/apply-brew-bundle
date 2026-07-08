@@ -19,4 +19,4 @@ if [[ -z "${owner_name}" ]]; then
 fi
 
 runuser -u "${owner_name}" -- \
-	env HOME="${owner_home:-/var/home/${owner_name}}" HOMEBREW_BUNDLE_FILE="${brewfile}" "${brew}" bundle --no-lock --file="${brewfile}"
+	env HOME="${owner_home:-/var/home/${owner_name}}" HOMEBREW_BUNDLE_FILE="${brewfile}" "${brew}" bundle --file="${brewfile}"

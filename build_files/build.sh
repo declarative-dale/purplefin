@@ -20,9 +20,12 @@ install -d /usr/share/purplefin
 printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
 
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
+chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
+if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
+	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
+fi
 
 echo ":: Installing common Purplefin RPM overlays"
-dnf5 -y --disable-repo=terra install 1password-cli
 dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
 
 if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then
@@ -33,11 +36,17 @@ fi
 echo ":: Enabling common Purplefin services"
 systemctl enable flatpak-nuke-fedora.service
 systemctl enable flatpak-preinstall.service
-systemctl enable purplefin-1password-desktop.service
 systemctl enable purplefin-brew-bundle.service
 
 echo ":: Applying Purplefin build profile: ${profile}"
 "${profile_script}"
+
+if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]] && find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -perm /111 -print -quit | grep -q .; then
+	echo ":: Enabling Purplefin rpm-ostree first-boot tasks"
+	systemctl enable purplefin-firstboot-rpm-ostree.service
+else
+	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for profile ${profile}"
+fi
 
 dnf5 clean all
 rm -rf /run/dnf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache /var/lib/authselect/backups /var/lib/dnf/repos /var/lib/dnf/system-repo.lock /var/log/dnf5.log
