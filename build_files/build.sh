@@ -22,7 +22,13 @@ printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
 
 echo ":: Installing common Purplefin RPM overlays"
-dnf5 -y install 1password-cli
+dnf5 -y --disable-repo=terra install 1password-cli
+dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
+
+if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then
+	echo ":: Granting Espanso Wayland input capability"
+	setcap "cap_dac_override+p" "$(command -v espanso)"
+fi
 
 echo ":: Enabling common Purplefin services"
 systemctl enable flatpak-nuke-fedora.service
