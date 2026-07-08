@@ -50,5 +50,13 @@ else
 	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for profile ${profile}"
 fi
 
+echo ":: Regenerating initramfs with Purplefin boot branding"
+for kernel_modules_dir in /usr/lib/modules/*; do
+	[[ -d "${kernel_modules_dir}" ]] || continue
+
+	kernel_version="$(basename "${kernel_modules_dir}")"
+	dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"
+done
+
 dnf5 clean all
 rm -rf /run/dnf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache /var/lib/authselect/backups /var/lib/dnf/repos /var/lib/dnf/system-repo.lock /var/log/dnf5.log

@@ -41,7 +41,12 @@ check:
     file system_files/usr/share/plymouth/themes/spinner/silverblue-watermark.png | grep -q 'PNG image data, 149 x 43'
     file system_files/usr/share/pixmaps/fedora-gdm-logo.png | grep -q 'PNG image data, 150 x 61'
     cmp -s system_files/usr/share/plymouth/themes/spinner/watermark.png system_files/usr/share/plymouth/themes/spinner/silverblue-watermark.png
-    test ! -e system_files/usr/share/ublue-os/bluefin-logos
+    for logo in bluefin chicken dolly karl; do
+        test -f "system_files/usr/share/ublue-os/bluefin-logos/${logo}.png"
+        file "system_files/usr/share/ublue-os/bluefin-logos/${logo}.png" | grep -q 'PNG image data, 1000 x 1000'
+        cmp -s "system_files/usr/share/ublue-os/bluefin-logos/${logo}.png" profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/refind/themes/rEFInd-Regular-Dark/icons/os_purplefin.png
+    done
+    grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test ! -e system_files/etc/yum.repos.d/1password.repo
     test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer

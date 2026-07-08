@@ -68,7 +68,7 @@ available after the reboot into that staged deployment.
 - System Flatpak preinstall manifest generated from this laptop.
 - Homebrew `Brewfile` generated from this laptop.
 - A first-boot, idempotent Homebrew bundle service.
-- Vates planet boot and GDM login branding over the inherited Bluefin/Fedora boot/login logo assets.
+- Vates planet boot, initramfs, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
