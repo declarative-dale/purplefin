@@ -20,7 +20,7 @@ laptop-specific hardware behavior.
 | Profile | Purpose |
 | --- | --- |
 | `generic-x86_64` | Common public x86_64 image with Purplefin packages, Flatpak preinstalls, and Homebrew bundle setup. |
-| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, and the local Plymouth payload with Vates boot branding. It contributes target-host rpm-ostree tasks for 1Password desktop layering and Plymouth initramfs tracking after first boot. |
+| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, and optional PAM U2F support for security keys. |
 
 The default profile is `generic-x86_64`.
 
@@ -70,8 +70,7 @@ available after the reboot into that staged deployment.
 - A first-boot, idempotent Homebrew bundle service.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
-- Dell XPS 9350 Intel profile files for fingerprint auth and Plymouth initramfs customization.
-- Dell XPS 9350 Intel first-boot rpm-ostree task to run `rpm-ostree initramfs-etc` on the installed host, because that command cannot run inside a container build.
+- Dell XPS 9350 Intel profile files for fingerprint auth.
 - Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked
