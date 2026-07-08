@@ -20,12 +20,14 @@ install -d /usr/share/purplefin
 printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
 
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
+chmod 0755 /usr/libexec/purplefin/install-ghostty-defaults
 chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
 	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
 fi
 
 echo ":: Installing common Purplefin RPM overlays"
+dnf5 -y install ghostty
 dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
 
 if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then

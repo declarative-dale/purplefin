@@ -20,6 +20,16 @@ check:
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
+    test -f system_files/etc/skel/.config/ghostty/config.ghostty
+    test -f system_files/usr/share/purplefin/ghostty/config.ghostty
+    cmp -s system_files/etc/skel/.config/ghostty/config.ghostty system_files/usr/share/purplefin/ghostty/config.ghostty
+    test -x system_files/usr/libexec/purplefin/install-ghostty-defaults
+    test -f system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service
+    test -L system_files/etc/systemd/user/default.target.wants/purplefin-ghostty-defaults.service
+    grep -qx 'copy-on-select = clipboard' system_files/etc/skel/.config/ghostty/config.ghostty
+    grep -qx 'right-click-action = paste' system_files/etc/skel/.config/ghostty/config.ghostty
+    test ! -e system_files/etc/xdg/xdg-terminals.list
+    test ! -e system_files/etc/xdg/gnome-xdg-terminals.list
     test -f profile_files/dell-xps-9350-intel/system_files/etc/plymouth/plymouthd.conf
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test ! -e system_files/etc/yum.repos.d/1password.repo
