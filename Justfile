@@ -62,11 +62,22 @@ check:
     done
     grep -qF 'PURPLEFIN_DELL_IPU7_KERNEL_EVR' Containerfile
     grep -qF 'PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED' Containerfile
+    grep -qF 'PURPLEFIN_DELL_MAINLINE_KERNEL_EVR' Containerfile
+    grep -qF 'PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED' Containerfile
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
     grep -qF '/var/lib/rpm-state' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -z "$(find system_files -iname '*ipu7*' -print -quit)"
+    test -x build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'copy_profile_file "etc/yum.repos.d/1password.repo"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'copy_profile_tree "usr/share/purplefin/refind"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'install_mainline_7_1_kernel' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'kernel_default_evr="7.1.2-355.vanilla.fc44"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'remove_inherited_v4l2loopback_kmods' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    ! grep -Eq 'copy_profile_(file|tree) ".*(dell-ipu7|ipu7-|v4l2loopback|libcamera|pipewire|intel_cvs|intel_ipu7)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    ! grep -Eq '20-dell-ipu7|30-dell-ipu7|40-dell-ipu7|dell-ipu7-setup|dell-ipu7-patch|usr/libexec/purplefin/lib/dell-ipu7|purplefin-dell-ipu7-(psys|v4l2loopback)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     test ! -e system_files/etc/yum.repos.d/1password.repo
     test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test -f profile_files/dell-xps-9350-intel/system_files/etc/yum.repos.d/1password.repo
@@ -222,8 +233,14 @@ build-generic:
 build-dell:
     podman build --build-arg BUILD_PROFILE=dell-xps-9350-intel --tag {{image}}:dell-xps-9350-intel .
 
+build-dell-no-ipu7:
+    podman build --build-arg BUILD_PROFILE=dell-xps-9350-intel-no-ipu7 --tag {{image}}:dell-xps-9350-intel-no-ipu7 .
+
 lint-generic:
     podman run --rm --entrypoint bootc {{image}}:generic-x86_64 container lint
 
 lint-dell:
     podman run --rm --entrypoint bootc {{image}}:dell-xps-9350-intel container lint
+
+lint-dell-no-ipu7:
+    podman run --rm --entrypoint bootc {{image}}:dell-xps-9350-intel-no-ipu7 container lint

@@ -8,6 +8,8 @@ ARG IMAGE_NAME=purplefin
 ARG IMAGE_VENDOR=declarative-dale
 ARG PURPLEFIN_DELL_IPU7_KERNEL_EVR=
 ARG PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED=0
+ARG PURPLEFIN_DELL_MAINLINE_KERNEL_EVR=
+ARG PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED=0
 
 LABEL org.opencontainers.image.title="Purplefin"
 LABEL org.opencontainers.image.description="A custom Bluefin image with selectable hardware profiles"
@@ -23,6 +25,8 @@ COPY profile_files/ /tmp/purplefin-profile-files/
 
 RUN PURPLEFIN_DELL_IPU7_KERNEL_EVR="${PURPLEFIN_DELL_IPU7_KERNEL_EVR}" \
     PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED="${PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED}" \
+    PURPLEFIN_DELL_MAINLINE_KERNEL_EVR="${PURPLEFIN_DELL_MAINLINE_KERNEL_EVR}" \
+    PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED="${PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED}" \
     /tmp/purplefin-build/build.sh "${BUILD_PROFILE}" && \
     rm -rf /tmp/purplefin-build /tmp/purplefin-profile-files && \
     bootc container lint && \

@@ -21,6 +21,7 @@ laptop-specific hardware behavior.
 | --- | --- |
 | `generic-x86_64` | Common public x86_64 image with Purplefin packages, Flatpak preinstalls, and Homebrew bundle setup. |
 | `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, rEFInd theming, Dell-only IPU7 camera setup, and optional PAM U2F support for security keys. |
+| `dell-xps-9350-intel-no-ipu7` | Dell XPS 9350 Intel test profile with the same pinned mainline `7.1.x` kernel and non-camera laptop setup as the Dell profile, but without the IPU7 camera, Intel webcam, libcamera, PipeWire camera, DKMS, or v4l2loopback pieces. |
 
 The default profile is `generic-x86_64`.
 
@@ -29,6 +30,7 @@ The default profile is `generic-x86_64`.
 ```bash
 just build-generic
 just build-dell
+just build-dell-no-ipu7
 ```
 
 Or select a profile directly:
@@ -50,6 +52,11 @@ podman build \
   .
 ```
 
+The no-IPU7 Dell test profile uses the same pinned mainline kernel by default.
+Its neutral canary arguments are
+`PURPLEFIN_DELL_MAINLINE_KERNEL_EVR` and
+`PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED`.
+
 ## Switch To The Image
 
 Generic profile:
@@ -64,20 +71,29 @@ Dell XPS 9350 Intel profile:
 sudo bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel
 ```
 
+Dell XPS 9350 Intel no-IPU7 test profile:
+
+```bash
+sudo bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel-no-ipu7
+```
+
 Reboot after switching.
 
 The `latest` tag tracks the generic profile. Use the `dell-xps-9350-intel`
-tag for the Dell profile. The base image bakes in the native `bw` Bitwarden CLI
-under `/usr/bin`. Bitwarden desktop is staged from the native Linux RPM by a
-base first-boot rpm-ostree task and becomes available after the reboot into that
-staged deployment. The Dell profile bakes in `1password-cli`; the 1Password
+tag for the full Dell IPU7 profile or `dell-xps-9350-intel-no-ipu7` for the
+Dell no-camera test profile. Both Dell profiles bake a pinned mainline
+`7.1.x` kernel. The base image bakes in the native `bw` Bitwarden CLI under
+`/usr/bin`. Bitwarden desktop is staged from the native Linux RPM by a base
+first-boot rpm-ostree task and becomes available after the reboot into that
+staged deployment. Both Dell profiles bake in `1password-cli`; the 1Password
 desktop RPM is layered by a first-boot rpm-ostree task and becomes available
 after the reboot into that staged deployment.
 
 ## Dell IPU7 Camera Flow
 
 The Dell XPS 9350 Intel profile includes Dell-only first-boot tasks for IPU7
-camera support. The generic profile does not install IPU7 repositories,
+camera support. The generic profile and the
+`dell-xps-9350-intel-no-ipu7` test profile do not install IPU7 repositories,
 services, module configs, or setup scripts.
 
 IPU7 setup requires a validated mainline Linux `7.1.x` kernel. Release
