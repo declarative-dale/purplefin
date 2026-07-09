@@ -1,0 +1,13 @@
+source_repo=librepods-org/librepods
+source_workflow=ci-linux-rust.yml
+source_workflow_id=201249671
+source_workflow_name=Linux CI (Rust)
+source_run_id=25080113527
+source_run_number=20
+source_run_url=https://github.com/librepods-org/librepods/actions/runs/25080113527
+source_run_updated_at=2026-04-28T22:11:13Z
+source_branch=linux/rust
+source_sha=4a9a2e7b642e4d2ec2e4e1259ffee0a06e108022
+source_artifact=librepods
+source_artifact_id=6695815067
+source_artifact_sha256=f4a4958002df5ccbced761f1cae9244ffda654176669f5c9088e020b6cf09651

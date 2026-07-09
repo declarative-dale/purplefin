@@ -87,7 +87,10 @@ Dell no-camera test profile. Both Dell profiles bake a pinned mainline
 first-boot rpm-ostree task and becomes available after the reboot into that
 staged deployment. Both Dell profiles bake in `1password-cli`; the 1Password
 desktop RPM is layered by a first-boot rpm-ostree task and becomes available
-after the reboot into that staged deployment.
+after the reboot into that staged deployment. Both Dell profiles also install
+Librepods at `/usr/bin/librepods` from the `librepods` artifact produced by the
+latest successful upstream Linux Rust workflow run recorded in
+`/usr/share/purplefin/librepods.provenance`.
 
 ## Dell IPU7 Camera Flow
 
@@ -190,6 +193,7 @@ path when `/dev/ipu7-psys0` is absent.
 - Vates planet boot, Plymouth, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
+- Dell XPS 9350 Intel Librepods binary from upstream GitHub Actions run `25080113527` (`linux/rust`, artifact `librepods`) installed only in Dell profiles.
 - Dell XPS 9350 Intel image-baked, pinned, validated mainline Linux `7.1.x` kernel plus first-boot IPU7 camera setup with DKMS `intel_cvs`, patched `intel_ipu7_psys`, IPU7 libcamera under `/usr/local`, PipeWire environment drop-in, and `/dev/video33` fallback service.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.

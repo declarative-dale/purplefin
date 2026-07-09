@@ -11,6 +11,7 @@ chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/30-dell-ipu7-build-deps
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/40-dell-ipu7-dkms-userspace
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-setup
+chmod 0755 /usr/libexec/purplefin/install-librepods
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 # shellcheck source=/usr/libexec/purplefin/lib/dell-ipu7.sh
@@ -202,6 +203,9 @@ install_ipu7_kernel() {
 }
 
 install_ipu7_kernel
+
+echo ":: Installing Librepods from pinned GitHub Actions artifact"
+/usr/libexec/purplefin/install-librepods
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service

@@ -69,10 +69,14 @@ check:
     grep -qF '/var/lib/rpm-state' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -z "$(find system_files -iname '*ipu7*' -print -quit)"
+    test -z "$(find system_files -iname '*librepods*' -print -quit)"
     test -x build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'copy_profile_file "etc/yum.repos.d/1password.repo"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'copy_profile_file "usr/libexec/purplefin/install-librepods"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF 'copy_profile_tree "usr/libexec/purplefin/librepods"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'copy_profile_tree "usr/share/purplefin/refind"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    grep -qF '/usr/libexec/purplefin/install-librepods' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'install_mainline_7_1_kernel' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'kernel_default_evr="7.1.2-355.vanilla.fc44"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'remove_inherited_v4l2loopback_kmods' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
@@ -88,6 +92,14 @@ check:
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/40-dell-ipu7-dkms-userspace
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/install-librepods
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/librepods/librepods
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/librepods/librepods.sha256
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/librepods.provenance
+    (cd profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/librepods && sha256sum -c librepods.sha256)
+    grep -qF 'source_run_id=25080113527' profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/librepods.provenance
+    grep -qF 'source_artifact=librepods' profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/librepods.provenance
+    grep -qF '/usr/libexec/purplefin/install-librepods' build_files/profiles/dell-xps-9350-intel.sh
     test -f profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
     grep -qF 'install_ipu7_kernel' build_files/profiles/dell-xps-9350-intel.sh
     grep -qF 'remove_non_ipu7_runtime_kernels' build_files/profiles/dell-xps-9350-intel.sh
