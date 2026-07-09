@@ -72,6 +72,11 @@ check:
     test -L profile_files/dell-xps-9350-intel/system_files/etc/systemd/user/default.target.wants/purplefin-dell-ipu7-v4l2loopback.service
     test -f profile_files/dell-xps-9350-intel/system_files/etc/modules-load.d/purplefin-dell-ipu7.conf
     grep -qF '0cab74a6146cdc094e90a408fc608773c350da0f' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    grep -qF 'ba5db745b26e54abbe459e1a38ff1d22d0fe0caa' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    grep -qF '32b0d940baaf182a9d01d4833e30bd340d4dc918' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/dell-ipu7/kernel-evr.denylist
+    grep -qF '7.1.2-355.vanilla.fc44' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
+    grep -qF 'kernel-staged.pending' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
     grep -qF 'debugfs_create_dir("ipu7-psys", NULL)' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/50-dell-vates-plymouth-initramfs
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/install-refind-theme
@@ -93,18 +98,77 @@ check:
 
     # shellcheck source=/dev/null
     source profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
+    kernel_denylist="${tmpdir}/ipu7-kernel.denylist"
+    ipu7_state_dir="${tmpdir}/ipu7-state"
+    : > "${kernel_denylist}"
+    export PURPLEFIN_DELL_IPU7_KERNEL_DENYLIST="${kernel_denylist}"
+    export PURPLEFIN_DELL_IPU7_STATE_DIR="${ipu7_state_dir}"
+    export PURPLEFIN_DELL_IPU7_UNAME_M="x86_64"
+
     for kernel_release in 7.1.0-100.fc99.x86_64 7.1.9-200.fc99.x86_64; do
         purplefin_dell_ipu7_kernel_supported "${kernel_release}"
     done
     for kernel_release in 6.17.9-200.fc99.x86_64 7.0.0-100.fc99.x86_64 7.0.18-200.fc99.x86_64 7.2.0-100.fc99.x86_64 7.1.0-0.rc1.fc99.x86_64 7.10.0-100.fc99.x86_64; do
         ! purplefin_dell_ipu7_kernel_supported "${kernel_release}"
     done
-    selected_kernel="$(printf '%s\n' '7.0.18-200.fc99' '7.1.2-200.fc99' '7.1.0-0.rc1.fc99' '7.2.0-100.fc99' | purplefin_dell_ipu7_select_kernel_evr)"
-    test "${selected_kernel}" = '7.1.2-200.fc99'
+    selected_kernel="$(printf '%s\n' '7.1.3-400.vanilla.fc44' '7.1.2-355.vanilla.fc44' '7.1.0-0.rc1.fc44' '7.0.18-200.fc44' | purplefin_dell_ipu7_select_kernel_evr)"
+    test "${selected_kernel}" = '7.1.2-355.vanilla.fc44'
+    export PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED=1
+    selected_kernel="$(printf '%s\n' '7.1.3-400.vanilla.fc44' '7.1.2-355.vanilla.fc44' '7.1.0-0.rc1.fc44' | purplefin_dell_ipu7_select_kernel_evr)"
+    test "${selected_kernel}" = '7.1.3-400.vanilla.fc44'
+    unset PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED
+    export PURPLEFIN_DELL_IPU7_KERNEL_EVR=7.1.1-10.vanilla.fc44
+    selected_kernel="$(printf '%s\n' '7.1.2-355.vanilla.fc44' '7.1.1-10.vanilla.fc44' | purplefin_dell_ipu7_select_kernel_evr)"
+    test "${selected_kernel}" = '7.1.1-10.vanilla.fc44'
+    unset PURPLEFIN_DELL_IPU7_KERNEL_EVR
+    printf '%s\n' '7.1.2-355.vanilla.fc44' > "${kernel_denylist}"
+    if printf '%s\n' '7.1.2-355.vanilla.fc44' | purplefin_dell_ipu7_select_kernel_evr >/dev/null; then
+        echo "Dell IPU7 kernel selector accepted a denied pinned kernel" >&2
+        exit 1
+    fi
+    : > "${kernel_denylist}"
     if printf '%s\n' '7.0.18-200.fc99' '7.1.0-0.rc1.fc99' | purplefin_dell_ipu7_select_kernel_evr >/dev/null; then
         echo "Dell IPU7 kernel selector accepted a non-stable-7.1 kernel" >&2
         exit 1
     fi
+    repoquery_fixture=$'kernel\t7.1.2-355.vanilla.fc44\tx86_64\nkernel-devel-matched\t7.1.2-355.vanilla.fc44\tnoarch\nkernel-headers\t7.1.2-355.vanilla.fc44\tx86_64'
+    package_specs="$(printf '%s\n' "${repoquery_fixture}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery '7.1.2-355.vanilla.fc44' 'x86_64' kernel kernel-devel-matched kernel-headers)"
+    grep -qx 'kernel-7.1.2-355.vanilla.fc44.x86_64' <<<"${package_specs}"
+    grep -qx 'kernel-devel-matched-7.1.2-355.vanilla.fc44.noarch' <<<"${package_specs}"
+    grep -qx 'kernel-headers-7.1.2-355.vanilla.fc44.x86_64' <<<"${package_specs}"
+    mismatched_repoquery_fixture=$'kernel\t7.1.2-355.vanilla.fc44\tx86_64\nkernel-headers\t7.1.3-400.vanilla.fc44\tx86_64'
+    if printf '%s\n' "${mismatched_repoquery_fixture}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery '7.1.2-355.vanilla.fc44' 'x86_64' kernel kernel-headers >/dev/null; then
+        echo "Dell IPU7 package validator accepted mismatched kernel headers" >&2
+        exit 1
+    fi
+    fstab_ok="${tmpdir}/fstab-ok"
+    fstab_bad="${tmpdir}/fstab-bad"
+    printf '%s\n' 'UUID=abcd /var ext4 defaults 0 0' > "${fstab_ok}"
+    printf '%s\n' '# comment' 'UUID=abcd / btrfs subvol=root 0 0' > "${fstab_bad}"
+    ! purplefin_dell_ipu7_fstab_has_root_mount_entry "${fstab_ok}"
+    purplefin_dell_ipu7_fstab_has_root_mount_entry "${fstab_bad}"
+    ipu7_config="${tmpdir}/ipu7-kernel.config"
+    printf '%s\n' 'CONFIG_IPU_BRIDGE=m' 'CONFIG_INTEL_SKL_INT3472=y' 'CONFIG_VIDEO_INTEL_IPU7=m' 'CONFIG_VIDEO_OV08X40=m' > "${ipu7_config}"
+    purplefin_dell_ipu7_validate_kernel_config_file "${ipu7_config}"
+    printf '%s\n' 'CONFIG_IPU_BRIDGE=m' 'CONFIG_INTEL_SKL_INT3472=y' 'CONFIG_VIDEO_INTEL_IPU7=m' > "${ipu7_config}"
+    if purplefin_dell_ipu7_validate_kernel_config_file "${ipu7_config}" >/dev/null 2>&1; then
+        echo "Dell IPU7 kernel config validator accepted a missing OV08X40 sensor driver" >&2
+        exit 1
+    fi
+    rm -rf "${ipu7_state_dir}"
+    export PURPLEFIN_DELL_IPU7_UNAME_R="7.1.2-355.vanilla.fc44.x86_64"
+    purplefin_dell_ipu7_record_kernel_staged '7.1.2-355.vanilla.fc44' '7.1.2-355.vanilla.fc44.x86_64' 'kernel-devel-7.1.2-355.vanilla.fc44.x86_64'
+    purplefin_dell_ipu7_assert_booted_kernel
+    test -f "${ipu7_state_dir}/kernel-booted.ok"
+    test ! -e "${ipu7_state_dir}/kernel-staged.pending"
+    rm -rf "${ipu7_state_dir}"
+    purplefin_dell_ipu7_record_kernel_staged '7.1.2-355.vanilla.fc44' '7.1.2-355.vanilla.fc44.x86_64'
+    export PURPLEFIN_DELL_IPU7_UNAME_R="7.0.11-200.fc44.x86_64"
+    if purplefin_dell_ipu7_assert_booted_kernel >/dev/null 2>&1; then
+        echo "Dell IPU7 marker gate accepted rollback from staged kernel" >&2
+        exit 1
+    fi
+    unset PURPLEFIN_DELL_IPU7_UNAME_R
 
     psys_patcher="profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs"
     old_psys_line=$'\tdir = debugfs_create_dir("psys", psys->adev->isp->ipu7_dir);'

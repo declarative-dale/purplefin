@@ -7,6 +7,7 @@ source /usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh
 source /usr/libexec/purplefin/lib/dell-ipu7.sh
 
 purplefin_dell_ipu7_assert_booted_kernel
+mapfile -t kernel_build_packages < <(purplefin_dell_ipu7_effective_kernel_build_packages)
 
 packages=(
 	git
@@ -19,8 +20,6 @@ packages=(
 	make
 	patch
 	perl
-	kernel-devel-matched
-	kernel-headers
 	meson
 	ninja-build
 	pkgconf-pkg-config
@@ -51,6 +50,6 @@ packages=(
 	v4l2loopback
 )
 
-purplefin_firstboot_log "staging Dell IPU7 DKMS, libcamera, PipeWire, GStreamer, kernel-devel, and v4l2loopback build dependencies"
-run_rpm_ostree install --idempotent "${packages[@]}"
+purplefin_firstboot_log "staging Dell IPU7 DKMS, libcamera, PipeWire, GStreamer, exact kernel build packages, and v4l2loopback build dependencies"
+run_rpm_ostree install --idempotent "${packages[@]}" "${kernel_build_packages[@]}"
 purplefin_firstboot_log "Dell IPU7 build dependencies have been staged; reboot before compiling DKMS modules and libcamera"

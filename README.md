@@ -67,26 +67,43 @@ The Dell XPS 9350 Intel profile includes Dell-only first-boot tasks for IPU7
 camera support. The generic profile does not install IPU7 repositories,
 services, module configs, or setup scripts.
 
-IPU7 setup requires a stable mainline Linux `7.1.x` kernel. Release candidates
-and other kernel series, including `7.0.x`, are rejected. The first Dell IPU7
-task enables a stable mainline kernel source for the Dell profile and stages a
-Linux `7.1.x` kernel. Later tasks run only after the system has rebooted into
-that supported kernel.
+IPU7 setup requires a validated mainline Linux `7.1.x` kernel. Release
+candidates and other kernel series, including `7.0.x`, are rejected. The first
+Dell IPU7 task enables the Dell-only mainline kernel source and stages only the
+pinned kernel EVR `7.1.2-355.vanilla.fc44` by default. Tested replacements can
+be selected with `PURPLEFIN_DELL_IPU7_KERNEL_EVR`; moving to the newest
+available stable `7.1.x` kernel requires the explicit
+`PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED=1` canary opt-in. Exact EVRs can be
+blocked in `/usr/share/purplefin/dell-ipu7/kernel-evr.denylist`.
+
+Before staging the override, Purplefin verifies that the kernel runtime
+packages, `kernel-devel`, `kernel-devel-matched`, and `kernel-headers` all
+exist for the same EVR and architecture. It also checks the target kernel config
+for required IPU7 support, refuses release candidates, and refuses to proceed if
+`/etc/fstab` contains a root `/` mount entry that could trigger an rpm-ostree
+remount failure.
 
 The staged flow is:
 
 1. `20-dell-ipu7-stable-kernel` writes the Dell-only mainline kernel repo and
-   stages the Linux `7.1.x` kernel override.
-2. Reboot into the staged kernel deployment.
-3. `30-dell-ipu7-build-deps` layers DKMS, clang/LLVM, kernel headers/devel,
-   libcamera, PipeWire, GStreamer, and `v4l2loopback` build dependencies.
+   stages the pinned Linux `7.1.x` kernel override, recording
+   `/var/lib/purplefin/dell-ipu7/kernel-staged.pending`.
+2. Reboot into the staged kernel deployment. On the next task run, Purplefin
+   replaces the pending marker with `kernel-booted.ok`; if the machine rolled
+   back to another kernel, later IPU7 tasks stop with a rollback diagnosis.
+3. `30-dell-ipu7-build-deps` layers DKMS, clang/LLVM, exact kernel
+   headers/devel packages for the validated kernel, libcamera, PipeWire,
+   GStreamer, and `v4l2loopback` build dependencies.
 4. Reboot into that dependency deployment.
 5. `40-dell-ipu7-dkms-userspace` clones
    `https://github.com/jibsta210/ipu7-camera-linux.git` at
-   `0cab74a6146cdc094e90a408fc608773c350da0f`, installs module ordering and
-   `/dev/video33` v4l2loopback config, builds `intel_cvs` with DKMS, builds a
-   patched `intel_ipu7_psys` DKMS module, and installs an IPU7-enabled
-   libcamera build under `/usr/local`.
+   `0cab74a6146cdc094e90a408fc608773c350da0f`, `intel/ipu7-drivers` at
+   `ba5db745b26e54abbe459e1a38ff1d22d0fe0caa`, and libcamera at
+   `32b0d940baaf182a9d01d4833e30bd340d4dc918`. It installs module ordering and
+   `/dev/video33` v4l2loopback config, builds `intel_cvs` with DKMS for the
+   booted kernel only, builds a patched `intel_ipu7_psys` DKMS module, probes
+   both modules, and installs an IPU7-enabled libcamera build under
+   `/usr/local`.
 
 The PSYS DKMS build applies a one-line debugfs fix before compiling:
 
@@ -115,10 +132,11 @@ Runtime verification on the Dell laptop:
 
 ```bash
 uname -r
+cat /var/lib/purplefin/dell-ipu7/kernel-booted.ok
 dkms status
 sudo modprobe intel_cvs
 sudo modprobe intel_ipu7_psys
-journalctl -k -b | grep -Ei 'ipu7|psys|lookup_noperm_common'
+journalctl -k -b | grep -Ei 'ipu7|psys|lookup_noperm_common|firmware'
 ls -l /dev/ipu7-psys0 /dev/video33
 cam -l
 ```
@@ -138,7 +156,7 @@ path when `/dev/ipu7-psys0` is absent.
 - Vates planet boot, initramfs, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
-- Dell XPS 9350 Intel first-boot IPU7 camera setup gated to stable mainline Linux `7.1.x`, with DKMS `intel_cvs`, patched `intel_ipu7_psys`, IPU7 libcamera under `/usr/local`, PipeWire environment drop-in, and `/dev/video33` fallback service.
+- Dell XPS 9350 Intel first-boot IPU7 camera setup gated to a pinned, validated mainline Linux `7.1.x` kernel, with DKMS `intel_cvs`, patched `intel_ipu7_psys`, IPU7 libcamera under `/usr/local`, PipeWire environment drop-in, and `/dev/video33` fallback service.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
 - Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.

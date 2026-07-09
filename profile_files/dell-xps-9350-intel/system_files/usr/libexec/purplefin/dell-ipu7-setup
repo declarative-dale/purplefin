@@ -7,9 +7,9 @@ source /usr/libexec/purplefin/lib/dell-ipu7.sh
 IPU7_CAMERA_REPO="${PURPLEFIN_DELL_IPU7_CAMERA_REPO:-https://github.com/jibsta210/ipu7-camera-linux.git}"
 IPU7_CAMERA_REF="${PURPLEFIN_DELL_IPU7_CAMERA_REF:-0cab74a6146cdc094e90a408fc608773c350da0f}"
 IPU7_DRIVERS_REPO="${PURPLEFIN_DELL_IPU7_DRIVERS_REPO:-https://github.com/intel/ipu7-drivers.git}"
-IPU7_DRIVERS_REF="${PURPLEFIN_DELL_IPU7_DRIVERS_REF:-main}"
+IPU7_DRIVERS_REF="${PURPLEFIN_DELL_IPU7_DRIVERS_REF:-ba5db745b26e54abbe459e1a38ff1d22d0fe0caa}"
 LIBCAMERA_REPO="${PURPLEFIN_DELL_IPU7_LIBCAMERA_REPO:-https://github.com/libcamera-org/libcamera.git}"
-LIBCAMERA_REF="${PURPLEFIN_DELL_IPU7_LIBCAMERA_REF:-master}"
+LIBCAMERA_REF="${PURPLEFIN_DELL_IPU7_LIBCAMERA_REF:-32b0d940baaf182a9d01d4833e30bd340d4dc918}"
 
 state_dir="${PURPLEFIN_DELL_IPU7_STATE_DIR:-/var/lib/purplefin/dell-ipu7}"
 src_dir="${state_dir}/src"
@@ -31,7 +31,7 @@ require_root() {
 require_commands() {
 	local command
 
-	for command in git rsync dkms make clang meson ninja sed awk grep sort head ldconfig depmod; do
+	for command in git rsync dkms make clang meson ninja sed awk grep sort head ldconfig depmod rpm modprobe modinfo; do
 		command -v "${command}" >/dev/null 2>&1 || fail "${command} is required for Dell IPU7 setup"
 	done
 }
@@ -63,8 +63,10 @@ copy_tree() {
 }
 
 assert_ipu7_firmware_present() {
+	purplefin_dell_ipu7_log "checking for IPU7 firmware under /usr/lib/firmware/intel/ipu and /lib/firmware/intel/ipu"
 	if compgen -G "/usr/lib/firmware/intel/ipu/*.bin" >/dev/null ||
 		compgen -G "/lib/firmware/intel/ipu/*.bin" >/dev/null; then
+		purplefin_dell_ipu7_log "IPU7 firmware is present"
 		return 0
 	fi
 
@@ -91,10 +93,12 @@ dkms_reinstall() {
 	local kernel_release
 
 	kernel_release="$(uname -r)"
+	purplefin_dell_ipu7_log "installing ${module} DKMS module ${version} for booted kernel ${kernel_release}"
 	dkms remove -m "${module}" -v "${version}" --all >/dev/null 2>&1 || true
 	dkms add -m "${module}" -v "${version}"
 	dkms build -m "${module}" -v "${version}" -k "${kernel_release}"
 	dkms install --force -m "${module}" -v "${version}" -k "${kernel_release}"
+	purplefin_dell_ipu7_log "installed ${module} DKMS module ${version} for ${kernel_release}"
 }
 
 install_cvs_dkms() {
@@ -112,7 +116,7 @@ CLEAN="make KERNELRELEASE=$kernelver KERNEL_SRC=$kernel_source_dir clean"
 BUILT_MODULE_NAME[0]="intel_cvs"
 DEST_MODULE_LOCATION[0]="/updates"
 
-AUTOINSTALL="yes"
+AUTOINSTALL="no"
 EOF
 	sed -i "s/#VERSION#/${version}/" "${source_dir}/dkms.conf"
 
@@ -141,7 +145,7 @@ BUILT_MODULE_NAME[0]="intel-ipu7-psys"
 BUILT_MODULE_LOCATION[0]="drivers/media/pci/intel/ipu7/psys"
 DEST_MODULE_LOCATION[0]="/updates"
 
-AUTOINSTALL="yes"
+AUTOINSTALL="no"
 EOF
 	sed -i "s/#VERSION#/${version}/" "${source_dir}/dkms.conf"
 
@@ -199,6 +203,39 @@ build_libcamera() {
 	ldconfig
 }
 
+load_ipu7_modules() {
+	local module module_path
+
+	for module in intel_cvs intel_ipu7_psys; do
+		purplefin_dell_ipu7_log "loading ${module} for booted kernel $(uname -r)"
+		modprobe "${module}" || fail "failed to load ${module}; inspect journalctl -k -b for IPU7, firmware, or symbol errors"
+		module_path="$(modinfo -n "${module}" 2>/dev/null || true)"
+		if [[ -n "${module_path}" ]]; then
+			purplefin_dell_ipu7_log "loaded ${module} from ${module_path}"
+		else
+			purplefin_dell_ipu7_log "loaded ${module}"
+		fi
+	done
+}
+
+log_libcamera_discovery() {
+	local cam_bin
+
+	if command -v cam >/dev/null 2>&1; then
+		cam_bin="$(command -v cam)"
+	elif [[ -x /usr/local/bin/cam ]]; then
+		cam_bin="/usr/local/bin/cam"
+	else
+		purplefin_dell_ipu7_log "libcamera cam tool is not available for discovery logging"
+		return 0
+	fi
+
+	purplefin_dell_ipu7_log "running ${cam_bin} -l for libcamera device discovery"
+	if ! "${cam_bin}" -l; then
+		purplefin_dell_ipu7_log "libcamera discovery did not complete; inspect camera firmware, PSYS nodes, and PipeWire logs"
+	fi
+}
+
 enable_runtime_units() {
 	depmod -a "$(uname -r)"
 	systemctl daemon-reload
@@ -209,6 +246,8 @@ main() {
 	require_root
 	require_commands
 	purplefin_dell_ipu7_assert_booted_kernel
+	purplefin_dell_ipu7_validate_installed_kernel_build_stack || fail "Dell IPU7 kernel build packages do not match booted kernel $(uname -r)"
+	purplefin_dell_ipu7_log "using ipu7-camera-linux ${IPU7_CAMERA_REF}, ipu7-drivers ${IPU7_DRIVERS_REF}, and libcamera ${LIBCAMERA_REF}"
 
 	install -d -m 0755 "${src_dir}"
 	clone_or_checkout "${IPU7_CAMERA_REPO}" "${IPU7_CAMERA_REF}" "${camera_checkout}"
@@ -218,7 +257,9 @@ main() {
 	assert_ipu7_firmware_present
 	install_cvs_dkms
 	install_psys_dkms
+	load_ipu7_modules
 	build_libcamera
+	log_libcamera_discovery
 	enable_runtime_units
 }
 
