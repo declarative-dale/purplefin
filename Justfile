@@ -25,7 +25,7 @@ check:
     printf '%s\n' '[Unit]' 'Description=Basic System' 'Requires=sysinit.target' 'After=sysinit.target' > "${tmpdir}/usr/lib/systemd/system/basic.target"
     printf '%s\n' '[Unit]' 'Description=Multi-User System' 'Requires=basic.target' 'After=basic.target' > "${tmpdir}/usr/lib/systemd/system/multi-user.target"
     printf '%s\n' '[Unit]' 'Description=udev settle stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-udev-settle.service"
-    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-psys-load.service
+    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-psys-load.service /usr/lib/systemd/system/purplefin-dell-ipu7-v4l2loopback-load.service
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
@@ -52,7 +52,11 @@ check:
         file "system_files/usr/share/ublue-os/bluefin-logos/${logo}.png" | grep -q 'PNG image data, 1000 x 1000'
         cmp -s "system_files/usr/share/ublue-os/bluefin-logos/${logo}.png" profile_files/dell-xps-9350-intel/system_files/usr/share/purplefin/refind/themes/rEFInd-Regular-Dark/icons/os_purplefin.png
     done
-    grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
+    grep -qF 'PURPLEFIN_DELL_IPU7_KERNEL_EVR' Containerfile
+    grep -qF 'PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED' Containerfile
+    ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
+    grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
+    grep -qF '/var/lib/rpm-state' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -z "$(find system_files -iname '*ipu7*' -print -quit)"
     test ! -e system_files/etc/yum.repos.d/1password.repo
@@ -66,11 +70,19 @@ check:
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
     test -f profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/lib/dell-ipu7.sh
+    grep -qF 'install_ipu7_kernel' build_files/profiles/dell-xps-9350-intel.sh
+    grep -qF 'remove_non_ipu7_runtime_kernels' build_files/profiles/dell-xps-9350-intel.sh
+    grep -qF 'remove_inherited_v4l2loopback_kmods' build_files/profiles/dell-xps-9350-intel.sh
+    grep -qF 'kernel-build-packages' build_files/profiles/dell-xps-9350-intel.sh
+    ! grep -qF 'override replace' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
+    grep -qF 'akmod-v4l2loopback' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/30-dell-ipu7-build-deps
     test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/system/purplefin-dell-ipu7-psys-load.service
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/system/purplefin-dell-ipu7-v4l2loopback-load.service
     test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/user/pipewire.service.d/10-purplefin-dell-ipu7-libcamera.conf
     test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/user/purplefin-dell-ipu7-v4l2loopback.service
     test -L profile_files/dell-xps-9350-intel/system_files/etc/systemd/user/default.target.wants/purplefin-dell-ipu7-v4l2loopback.service
-    test -f profile_files/dell-xps-9350-intel/system_files/etc/modules-load.d/purplefin-dell-ipu7.conf
+    test ! -e profile_files/dell-xps-9350-intel/system_files/etc/modules-load.d/purplefin-dell-ipu7.conf
+    grep -qF 'purplefin-dell-ipu7-v4l2loopback-load.service' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
     grep -qF '0cab74a6146cdc094e90a408fc608773c350da0f' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
     grep -qF 'ba5db745b26e54abbe459e1a38ff1d22d0fe0caa' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup
     grep -qF '32b0d940baaf182a9d01d4833e30bd340d4dc918' profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-setup

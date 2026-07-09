@@ -240,6 +240,7 @@ enable_runtime_units() {
 	depmod -a "$(uname -r)"
 	systemctl daemon-reload
 	systemctl enable purplefin-dell-ipu7-psys-load.service
+	systemctl enable purplefin-dell-ipu7-v4l2loopback-load.service
 }
 
 main() {

@@ -10,13 +10,6 @@ repo_id="$(purplefin_dell_ipu7_kernel_repo_id)"
 repo_file="/etc/yum.repos.d/purplefin-dell-ipu7-mainline-kernel.repo"
 repo_tmp="$(mktemp)"
 
-kernel_runtime_packages=(
-	kernel
-	kernel-core
-	kernel-modules
-	kernel-modules-core
-	kernel-modules-extra
-)
 kernel_build_packages=(
 	kernel-devel
 	kernel-devel-matched
@@ -50,83 +43,24 @@ EOF
 	rm -f "${repo_tmp}"
 }
 
-assert_no_root_fstab_entry() {
-	if purplefin_dell_ipu7_fstab_has_root_mount_entry /etc/fstab; then
-		fail "refusing Dell IPU7 kernel staging because /etc/fstab contains a root mount entry; remove the / entry before rpm-ostree kernel overrides"
-	fi
-}
-
-validate_target_kernel_config() {
-	local evr="$1"
-	local arch="$2"
-	local release config_path tmpdir rpm_path status
-
-	release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${evr}" "${arch}")"
-	if config_path="$(purplefin_dell_ipu7_find_local_kernel_config "${release}")"; then
-		purplefin_firstboot_log "validating Dell IPU7 kernel config from ${config_path}"
-		purplefin_dell_ipu7_validate_kernel_config_file "${config_path}"
-		return $?
-	fi
-
-	for command in dnf5 rpm2cpio cpio; do
-		command -v "${command}" >/dev/null 2>&1 || fail "${command} is required to inspect ${repo_id} kernel config before staging"
-	done
-
-	tmpdir="$(mktemp -d)"
-	if ! dnf5 -q --disablerepo='*' --enablerepo="${repo_id}" download --destdir="${tmpdir}" "kernel-core-${evr}.${arch}"; then
-		rm -rf "${tmpdir}"
-		return 1
-	fi
-
-	rpm_path="$(find "${tmpdir}" -maxdepth 1 -type f -name "kernel-core-${evr}.${arch}.rpm" -print -quit)"
-	if [[ -z "${rpm_path}" ]]; then
-		rpm_path="$(find "${tmpdir}" -maxdepth 1 -type f -name 'kernel-core-*.rpm' -print -quit)"
-	fi
-	[[ -n "${rpm_path}" ]] || {
-		rm -rf "${tmpdir}"
-		return 1
-	}
-
-	(
-		cd "${tmpdir}"
-		rpm2cpio "${rpm_path}" | cpio -idm --quiet "./usr/lib/modules/${release}/config" "./lib/modules/${release}/config" "./boot/config-${release}" >/dev/null 2>&1 || true
-	)
-
-	status=1
-	for config_path in \
-		"${tmpdir}/usr/lib/modules/${release}/config" \
-		"${tmpdir}/lib/modules/${release}/config" \
-		"${tmpdir}/boot/config-${release}"; do
-		if [[ -f "${config_path}" ]]; then
-			purplefin_firstboot_log "validating Dell IPU7 kernel config from ${rpm_path}"
-			if purplefin_dell_ipu7_validate_kernel_config_file "${config_path}"; then
-				status=0
-			fi
-			break
-		fi
-	done
-	rm -rf "${tmpdir}"
-	return "${status}"
-}
-
 collect_package_specs() {
 	local evr="$1"
 	local arch="$2"
 	shift 2
 	local repoquery_output specs
+	local repoquery_format=$'%{name}\t%{evr}\t%{arch}\n'
 
 	repoquery_output="$(
-		dnf5 -q --refresh --disablerepo='*' --enablerepo="${repo_id}" repoquery --available --qf '%{name}\t%{evr}\t%{arch}' "$@" | sort -u
+		dnf5 -q --refresh --disablerepo='*' --enablerepo="${repo_id}" repoquery --available --qf "${repoquery_format}" "$@" | sort -u
 	)"
 	specs="$(printf '%s\n' "${repoquery_output}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery "${evr}" "${arch}" "$@")" || return 1
 	printf '%s\n' "${specs}"
 }
 
 write_kernel_repo
-assert_no_root_fstab_entry
 
 if purplefin_dell_ipu7_mark_booted_kernel_ok_if_pending; then
-	purplefin_firstboot_log "Dell IPU7 staged kernel boot confirmed: $(purplefin_dell_ipu7_uname_r)"
+	purplefin_firstboot_log "Dell IPU7 baked kernel boot confirmed from legacy pending marker: $(purplefin_dell_ipu7_uname_r)"
 	exit 0
 fi
 if purplefin_dell_ipu7_refuse_failed_kernel_stage; then
@@ -140,47 +74,43 @@ if [[ -n "${ok_evr}" ]]; then
 	exit 0
 fi
 
-if ! command -v dnf5 >/dev/null 2>&1; then
-	fail "dnf5 is required to query ${repo_id} for Dell IPU7 kernels"
-fi
-
-mapfile -t kernel_evrs < <(
-	dnf5 -q --refresh --disablerepo='*' --enablerepo="${repo_id}" repoquery --available --qf '%{evr}' kernel-core | sort -u
-)
-
-selected_evr="$(printf '%s\n' "${kernel_evrs[@]}" | purplefin_dell_ipu7_select_kernel_evr)" || {
-	if [[ "${PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED:-0}" == "1" ]]; then
-		fail "no stable, non-denied Linux 7.1.x kernel-core package found in ${repo_id}"
-	fi
-	fail "pinned Dell IPU7 kernel $(purplefin_dell_ipu7_default_kernel_evr) is not available in ${repo_id}; set PURPLEFIN_DELL_IPU7_KERNEL_EVR for a tested replacement or PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED=1 for manual canary testing"
-}
-
+target_release="$(purplefin_dell_ipu7_uname_r)"
 target_arch="$(purplefin_dell_ipu7_uname_m)"
-target_release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${selected_evr}" "${target_arch}")"
+target_evr="$(purplefin_dell_ipu7_booted_kernel_evr)"
 
-runtime_specs_output="$(collect_package_specs "${selected_evr}" "${target_arch}" "${kernel_runtime_packages[@]}")" || {
-	fail "missing runtime package for coherent Dell IPU7 kernel ${selected_evr} in ${repo_id}"
-}
-build_specs_output="$(collect_package_specs "${selected_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
-	fail "missing kernel-devel, kernel-devel-matched, or kernel-headers for Dell IPU7 kernel ${selected_evr} in ${repo_id}"
-}
-mapfile -t override_specs <<<"${runtime_specs_output}"
-mapfile -t build_specs <<<"${build_specs_output}"
-
-validate_target_kernel_config "${selected_evr}" "${target_arch}" || {
-	fail "target kernel ${target_release} does not expose the required Dell IPU7 config flags"
-}
-
-if purplefin_dell_ipu7_kernel_release_matches_evr "$(purplefin_dell_ipu7_uname_r)" "${selected_evr}" "${target_arch}"; then
-	purplefin_dell_ipu7_record_kernel_booted_ok "${selected_evr}" "$(purplefin_dell_ipu7_uname_r)" "${build_specs[@]}"
-	purplefin_firstboot_log "booted kernel $(purplefin_dell_ipu7_uname_r) already matches validated Dell IPU7 kernel ${selected_evr}"
-	exit 0
+if ! purplefin_dell_ipu7_kernel_supported "${target_release}" || purplefin_dell_ipu7_kernel_evr_denied "${target_evr}"; then
+	fail "Dell IPU7 profile booted unsupported kernel ${target_release}; rebuild the Dell image with the validated Linux 7.1.x kernel baked in"
 fi
 
-purplefin_firstboot_log "staging Dell IPU7 kernel override for pinned Linux ${selected_evr} from ${repo_id}"
-purplefin_dell_ipu7_record_kernel_staged "${selected_evr}" "${target_release}" "${build_specs[@]}"
-if ! run_rpm_ostree override replace --experimental --from repo="${repo_id}" "${override_specs[@]}"; then
-	rm -f "$(purplefin_dell_ipu7_kernel_pending_file)"
-	exit 1
+config_path="$(purplefin_dell_ipu7_find_local_kernel_config "${target_release}")" || {
+	fail "Dell IPU7 baked kernel config for ${target_release} is missing"
+}
+purplefin_firstboot_log "validating Dell IPU7 baked kernel config from ${config_path}"
+purplefin_dell_ipu7_validate_kernel_config_file "${config_path}" || {
+	fail "baked kernel ${target_release} does not expose the required Dell IPU7 config flags"
+}
+
+if [[ -f /usr/share/purplefin/dell-ipu7/kernel-build-packages ]]; then
+	mapfile -t build_specs < /usr/share/purplefin/dell-ipu7/kernel-build-packages
+else
+	if ! command -v dnf5 >/dev/null 2>&1; then
+		fail "dnf5 is required to query ${repo_id} for Dell IPU7 kernel build packages"
+	fi
+	build_specs_output="$(collect_package_specs "${target_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
+		fail "missing kernel-devel, kernel-devel-matched, or kernel-headers for Dell IPU7 kernel ${target_evr} in ${repo_id}"
+	}
+	mapfile -t build_specs <<<"${build_specs_output}"
 fi
-purplefin_firstboot_log "Dell IPU7 kernel override staged; reboot into ${target_release} before DKMS setup"
+if ((${#build_specs[@]} == 0)); then
+	fail "Dell IPU7 build package manifest is empty for ${target_release}"
+fi
+
+for build_spec in "${build_specs[@]}"; do
+	[[ -n "${build_spec}" ]] || continue
+	if [[ "${build_spec}" != *"${target_evr}"* ]]; then
+		fail "recorded Dell IPU7 build package ${build_spec} does not match booted kernel ${target_release}"
+	fi
+done
+
+purplefin_dell_ipu7_record_kernel_booted_ok "${target_evr}" "${target_release}" "${build_specs[@]}"
+purplefin_firstboot_log "Dell IPU7 baked kernel ${target_release} validated"

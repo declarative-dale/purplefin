@@ -13,6 +13,196 @@ chmod 0755 /usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-setup
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
+# shellcheck source=/usr/libexec/purplefin/lib/dell-ipu7.sh
+source /usr/libexec/purplefin/lib/dell-ipu7.sh
+
+kernel_repo_id="$(purplefin_dell_ipu7_kernel_repo_id)"
+kernel_repo_file="/etc/yum.repos.d/purplefin-dell-ipu7-mainline-kernel.repo"
+kernel_runtime_packages=(
+	kernel
+	kernel-core
+	kernel-modules
+	kernel-modules-core
+	kernel-modules-extra
+)
+kernel_build_packages=(
+	kernel-devel
+	kernel-devel-matched
+	kernel-headers
+)
+
+write_ipu7_kernel_repo() {
+	install -d -m 0755 "$(dirname "${kernel_repo_file}")"
+	cat >"${kernel_repo_file}" <<EOF
+[${kernel_repo_id}]
+name=Purplefin Dell IPU7 pinned mainline kernel source
+baseurl=$(purplefin_dell_ipu7_kernel_repo_baseurl)
+type=rpm-md
+skip_if_unavailable=False
+gpgcheck=1
+gpgkey=$(purplefin_dell_ipu7_kernel_repo_gpgkey)
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
+priority=90
+EOF
+}
+
+collect_ipu7_kernel_package_specs() {
+	local evr="$1"
+	local arch="$2"
+	shift 2
+	local repoquery_output specs
+	local repoquery_format=$'%{name}\t%{evr}\t%{arch}\n'
+
+	repoquery_output="$(
+		dnf5 -q --refresh --disablerepo='*' --enablerepo="${kernel_repo_id}" repoquery --available --qf "${repoquery_format}" "$@" | sort -u
+	)"
+	specs="$(printf '%s\n' "${repoquery_output}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery "${evr}" "${arch}" "$@")" || return 1
+	printf '%s\n' "${specs}"
+}
+
+validate_ipu7_kernel_config_from_rpm() {
+	local evr="$1"
+	local arch="$2"
+	local release tmpdir rpm_path config_path status
+
+	release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${evr}" "${arch}")"
+	tmpdir="$(mktemp -d)"
+	if ! dnf5 -q --disablerepo='*' --enablerepo="${kernel_repo_id}" download --destdir="${tmpdir}" "kernel-core-${evr}.${arch}"; then
+		rm -rf "${tmpdir}"
+		return 1
+	fi
+
+	rpm_path="$(find "${tmpdir}" -maxdepth 1 -type f -name "kernel-core-${evr}.${arch}.rpm" -print -quit)"
+	[[ -n "${rpm_path}" ]] || {
+		rm -rf "${tmpdir}"
+		return 1
+	}
+
+	(
+		cd "${tmpdir}"
+		rpm2cpio "${rpm_path}" | cpio -idm --quiet "./usr/lib/modules/${release}/config" "./lib/modules/${release}/config" "./boot/config-${release}" >/dev/null 2>&1 || true
+	)
+
+	status=1
+	for config_path in \
+		"${tmpdir}/usr/lib/modules/${release}/config" \
+		"${tmpdir}/lib/modules/${release}/config" \
+		"${tmpdir}/boot/config-${release}"; do
+		if [[ -f "${config_path}" ]]; then
+			if purplefin_dell_ipu7_validate_kernel_config_file "${config_path}"; then
+				status=0
+			fi
+			break
+		fi
+	done
+	rm -rf "${tmpdir}"
+	return "${status}"
+}
+
+remove_non_ipu7_runtime_kernels() {
+	local target_evr="$1"
+	local target_arch="$2"
+	local repoquery_output package evr arch spec
+	local repoquery_format=$'%{name}\t%{evr}\t%{arch}\n'
+	local remove_specs=()
+
+	repoquery_output="$(dnf5 -q repoquery --installed --qf "${repoquery_format}" "${kernel_runtime_packages[@]}" | sort -u)"
+	while IFS=$'\t' read -r package evr arch; do
+		[[ -n "${package}" ]] || continue
+		if [[ "${evr}" != "${target_evr#0:}" || "${arch}" != "${target_arch}" ]]; then
+			spec="${package}-${evr}.${arch}"
+			remove_specs+=("${spec}")
+		fi
+	done <<<"${repoquery_output}"
+
+	if ((${#remove_specs[@]} > 0)); then
+		echo ":: Removing inherited non-IPU7 runtime kernels: ${remove_specs[*]}"
+		dnf5 -y remove --no-autoremove "${remove_specs[@]}"
+	fi
+}
+
+remove_inherited_v4l2loopback_kmods() {
+	local packages=(
+		kmod-v4l2loopback
+		v4l2loopback
+	)
+	local installed=()
+	local package
+
+	for package in "${packages[@]}"; do
+		if rpm -q "${package}" >/dev/null 2>&1; then
+			installed+=("${package}")
+		fi
+	done
+
+	if ((${#installed[@]} > 0)); then
+		echo ":: Removing inherited prebuilt v4l2loopback kmods before Dell IPU7 kernel install"
+		dnf5 -y remove --no-autoremove "${installed[@]}"
+	fi
+}
+
+install_ipu7_kernel() {
+	local target_arch selected_evr target_release
+	local runtime_specs_output build_specs_output
+	local kernel_evrs=()
+	local runtime_specs=()
+	local build_specs=()
+	local evr_query_format=$'%{evr}\n'
+
+	for command in dnf5 rpm2cpio cpio; do
+		command -v "${command}" >/dev/null 2>&1 || {
+			echo "${command} is required to install the Dell IPU7 kernel" >&2
+			exit 1
+		}
+	done
+
+	write_ipu7_kernel_repo
+	mapfile -t kernel_evrs < <(
+		dnf5 -q --refresh --disablerepo='*' --enablerepo="${kernel_repo_id}" repoquery --available --qf "${evr_query_format}" kernel-core | sort -u
+	)
+	selected_evr="$(printf '%s\n' "${kernel_evrs[@]}" | purplefin_dell_ipu7_select_kernel_evr)" || {
+		echo "Pinned Dell IPU7 kernel $(purplefin_dell_ipu7_default_kernel_evr) is not available in ${kernel_repo_id}" >&2
+		exit 1
+	}
+	target_arch="$(purplefin_dell_ipu7_uname_m)"
+	target_release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${selected_evr}" "${target_arch}")"
+
+	runtime_specs_output="$(collect_ipu7_kernel_package_specs "${selected_evr}" "${target_arch}" "${kernel_runtime_packages[@]}")" || {
+		echo "Missing runtime package for coherent Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
+		exit 1
+	}
+	build_specs_output="$(collect_ipu7_kernel_package_specs "${selected_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
+		echo "Missing kernel-devel, kernel-devel-matched, or kernel-headers for Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
+		exit 1
+	}
+	mapfile -t runtime_specs <<<"${runtime_specs_output}"
+	mapfile -t build_specs <<<"${build_specs_output}"
+
+	validate_ipu7_kernel_config_from_rpm "${selected_evr}" "${target_arch}" || {
+		echo "Target kernel ${target_release} does not expose the required Dell IPU7 config flags" >&2
+		exit 1
+	}
+
+	echo ":: Installing Dell IPU7 baked kernel ${selected_evr}"
+	remove_inherited_v4l2loopback_kmods
+	dnf5 -y --disablerepo='*' --enablerepo="${kernel_repo_id}" install "${runtime_specs[@]}"
+	remove_non_ipu7_runtime_kernels "${selected_evr}" "${target_arch}"
+
+	test -d "/usr/lib/modules/${target_release}" || {
+		echo "Dell IPU7 kernel modules directory /usr/lib/modules/${target_release} was not installed" >&2
+		exit 1
+	}
+	test -f "/usr/lib/modules/${target_release}/initramfs.img" || {
+		echo "Dell IPU7 kernel initramfs /usr/lib/modules/${target_release}/initramfs.img was not installed" >&2
+		exit 1
+	}
+	printf '%s\n' "${build_specs[@]}" > /usr/share/purplefin/dell-ipu7/kernel-build-packages
+}
+
+install_ipu7_kernel
+
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service
 

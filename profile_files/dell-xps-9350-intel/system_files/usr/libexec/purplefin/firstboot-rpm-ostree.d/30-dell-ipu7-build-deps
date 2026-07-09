@@ -47,9 +47,9 @@ packages=(
 	pipewire
 	pipewire-devel
 	systemd-devel
-	v4l2loopback
+	akmod-v4l2loopback
 )
 
-purplefin_firstboot_log "staging Dell IPU7 DKMS, libcamera, PipeWire, GStreamer, exact kernel build packages, and v4l2loopback build dependencies"
+purplefin_firstboot_log "staging Dell IPU7 DKMS, libcamera, PipeWire, GStreamer, exact kernel build packages, and akmod-v4l2loopback fallback support"
 run_rpm_ostree install --idempotent "${packages[@]}" "${kernel_build_packages[@]}"
 purplefin_firstboot_log "Dell IPU7 build dependencies have been staged; reboot before compiling DKMS modules and libcamera"
