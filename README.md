@@ -67,9 +67,12 @@ sudo bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel
 Reboot after switching.
 
 The `latest` tag tracks the generic profile. Use the `dell-xps-9350-intel`
-tag for the Dell profile. The Dell profile bakes in `1password-cli`; the
-1Password desktop RPM is layered by a first-boot rpm-ostree task and becomes
-available after the reboot into that staged deployment.
+tag for the Dell profile. The base image bakes in the native `bw` Bitwarden CLI
+under `/usr/bin`. Bitwarden desktop is staged from the native Linux RPM by a
+base first-boot rpm-ostree task and becomes available after the reboot into that
+staged deployment. The Dell profile bakes in `1password-cli`; the 1Password
+desktop RPM is layered by a first-boot rpm-ostree task and becomes available
+after the reboot into that staged deployment.
 
 ## Dell IPU7 Camera Flow
 
@@ -162,8 +165,11 @@ path when `/dev/ipu7-psys0` is absent.
 
 - Base image selection and build profile logic.
 - A centralized first-boot rpm-ostree runner with ordered task scripts and `/var/lib/purplefin/firstboot/*.done` markers. It stops after a task stages a deployment so later rpm-ostree tasks run after the next reboot instead of replacing earlier queued changes.
-- System Flatpak preinstall manifest generated from this laptop.
+- System Flatpak preinstall manifest generated from this laptop. Bitwarden is
+  intentionally excluded from this manifest and installed natively instead.
 - Homebrew `Brewfile` generated from this laptop.
+- Native Bitwarden CLI under `/usr/bin/bw` plus a base first-boot rpm-ostree
+  task that layers the native Bitwarden desktop RPM.
 - A first-boot, idempotent Homebrew bundle service.
 - Vates planet boot, Plymouth, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.

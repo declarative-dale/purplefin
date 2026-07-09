@@ -29,6 +29,14 @@ check:
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
+    ! grep -qF 'com.bitwarden.desktop' manifests/flatpaks.preinstall
+    test -x system_files/usr/libexec/purplefin/install-bitwarden-cli-native
+    test -x system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    grep -qF '/usr/libexec/purplefin/install-bitwarden-cli-native' build_files/build.sh
+    grep -qF 'app=desktop&platform=linux&variant=rpm' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    grep -qF 'app=cli&platform=linux' system_files/usr/libexec/purplefin/install-bitwarden-cli-native
+    grep -qF 'run_rpm_ostree install --idempotent "${desktop_rpm}"' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    grep -qF '/usr/bin/bw' system_files/usr/libexec/purplefin/install-bitwarden-cli-native
     test -f system_files/etc/skel/.config/ghostty/config.ghostty
     test -f system_files/usr/share/purplefin/ghostty/config.ghostty
     cmp -s system_files/etc/skel/.config/ghostty/config.ghostty system_files/usr/share/purplefin/ghostty/config.ghostty

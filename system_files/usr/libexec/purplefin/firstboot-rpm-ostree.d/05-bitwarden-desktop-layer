@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=/usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh
+source /usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh
+
+desktop_rpm_url="${PURPLEFIN_BITWARDEN_DESKTOP_RPM_URL:-https://vault.bitwarden.com/download/?app=desktop&platform=linux&variant=rpm}"
+workdir="/var/tmp/purplefin-bitwarden-native"
+desktop_rpm="${workdir}/bitwarden.rpm"
+
+if [[ -e /usr/lib/opt/Bitwarden/bitwarden || -e /opt/Bitwarden/bitwarden ]]; then
+	purplefin_firstboot_log "Bitwarden desktop is already present"
+	exit 0
+fi
+
+command -v curl >/dev/null 2>&1 || {
+	purplefin_firstboot_log "curl is required to download the native Bitwarden desktop RPM"
+	exit 1
+}
+
+install -d -m 0755 "${workdir}"
+curl --fail --location --show-error --silent --retry 3 --retry-delay 2 --output "${desktop_rpm}" "${desktop_rpm_url}"
+run_rpm_ostree install --idempotent "${desktop_rpm}"
+rm -f "${desktop_rpm}"
+
+purplefin_firstboot_log "Bitwarden desktop RPM has been staged as an rpm-ostree layered package; reboot to use the new deployment"

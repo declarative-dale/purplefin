@@ -20,6 +20,7 @@ install -d /usr/share/purplefin
 printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
 
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
+chmod 0755 /usr/libexec/purplefin/install-bitwarden-cli-native
 chmod 0755 /usr/libexec/purplefin/install-ghostty-defaults
 chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
@@ -29,6 +30,7 @@ fi
 echo ":: Installing common Purplefin RPM overlays"
 dnf5 -y install ghostty
 dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
+/usr/libexec/purplefin/install-bitwarden-cli-native
 
 if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then
 	echo ":: Granting Espanso Wayland input capability"
