@@ -100,6 +100,7 @@ check:
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
     grep -qF '/var/lib/rpm-state' build_files/build.sh
+    grep -qF '/var/log/dnf5.log*' build_files/build.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -z "$(find system_files -iname '*ipu7*' -print -quit)"
     test -z "$(find system_files -iname '*librepods*' -print -quit)"
