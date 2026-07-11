@@ -32,13 +32,33 @@ check:
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
     ! grep -qF 'com.bitwarden.desktop' manifests/flatpaks.preinstall
-    test -x system_files/usr/libexec/purplefin/install-bitwarden-cli-native
+    test ! -e system_files/usr/libexec/purplefin/install-bitwarden-cli-native
     test -x system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF '/usr/libexec/purplefin/install-bitwarden-cli-native' build_files/build.sh
     grep -qF 'app=desktop&platform=linux&variant=rpm' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF 'app=cli&platform=linux' system_files/usr/libexec/purplefin/install-bitwarden-cli-native
+    grep -qF 'rpm -q bitwarden' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    grep -qF "rpm -qp --qf '%{NAME}\\n'" system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
     grep -qF 'run_rpm_ostree install --idempotent "${desktop_rpm}"' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF '/usr/bin/bw' system_files/usr/libexec/purplefin/install-bitwarden-cli-native
+    test -x build_files/install-bitwarden-cli-rpm.sh
+    test -f build_files/bitwarden-cli.spec
+    grep -qF 'https://vault.bitwarden.com/download/?app=cli&platform=linux' build_files/install-bitwarden-cli-rpm.sh
+    grep -qF 'rpmbuild -bb' build_files/install-bitwarden-cli-rpm.sh
+    grep -qF 'Name:           purplefin-bitwarden-cli' build_files/bitwarden-cli.spec
+    grep -qF '%global __os_install_post %{nil}' build_files/bitwarden-cli.spec
+    grep -qF 'bash /tmp/purplefin-build/install-bitwarden-cli-rpm.sh' build_files/build.sh
+    grep -qF 'rpm -q purplefin-bitwarden-cli' build_files/build.sh
+    grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
+    for package in nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
+        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
+    done
+    grep -qF 'dnf5 -y install "${base_packages[@]}"' build_files/build.sh
+    grep -qF 'for command in nm-connection-editor wg' build_files/build.sh
+    grep -qF 'test -f /usr/share/applications/nm-connection-editor.desktop' build_files/build.sh
+    grep -qF 'systemctl disable tailscaled.service' build_files/build.sh
+    grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/build.sh
+    grep -qF 'rm -f /etc/yum.repos.d/tailscale.repo' build_files/build.sh
+    grep -qF 'rm -f /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' build_files/build.sh
+    grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/build.sh
+    grep -qF "sed -i '/^Tailscale is included,/d'" build_files/build.sh
     test -f system_files/etc/skel/.config/ghostty/config.ghostty
     test -f system_files/usr/share/purplefin/ghostty/config.ghostty
     cmp -s system_files/etc/skel/.config/ghostty/config.ghostty system_files/usr/share/purplefin/ghostty/config.ghostty
@@ -49,7 +69,7 @@ check:
     grep -qx 'right-click-action = paste' system_files/etc/skel/.config/ghostty/config.ghostty
     test ! -e system_files/etc/xdg/xdg-terminals.list
     test ! -e system_files/etc/xdg/gnome-xdg-terminals.list
-    grep -qx 'excludepkgs=1password\*' system_files/etc/yum.repos.d/terra.repo
+    grep -qx 'excludepkgs=1password\*,bitwarden\*' system_files/etc/yum.repos.d/terra.repo
     test -f system_files/etc/yum.repos.d/hashicorp.repo
     grep -qx '\[hashicorp\]' system_files/etc/yum.repos.d/hashicorp.repo
     grep -qx 'baseurl=https://rpm.releases.hashicorp.com/fedora/\$releasever/\$basearch/stable' system_files/etc/yum.repos.d/hashicorp.repo

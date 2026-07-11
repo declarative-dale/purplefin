@@ -8,7 +8,7 @@ desktop_rpm_url="${PURPLEFIN_BITWARDEN_DESKTOP_RPM_URL:-https://vault.bitwarden.
 workdir="/var/tmp/purplefin-bitwarden-native"
 desktop_rpm="${workdir}/bitwarden.rpm"
 
-if [[ -e /usr/lib/opt/Bitwarden/bitwarden || -e /opt/Bitwarden/bitwarden ]]; then
+if rpm -q bitwarden >/dev/null 2>&1 || [[ -e /usr/lib/opt/Bitwarden/bitwarden || -e /opt/Bitwarden/bitwarden ]]; then
 	purplefin_firstboot_log "Bitwarden desktop is already present"
 	exit 0
 fi
@@ -20,6 +20,10 @@ command -v curl >/dev/null 2>&1 || {
 
 install -d -m 0755 "${workdir}"
 curl --fail --location --show-error --silent --retry 3 --retry-delay 2 --output "${desktop_rpm}" "${desktop_rpm_url}"
+if [[ "$(rpm -qp --qf '%{NAME}\n' "${desktop_rpm}")" != "bitwarden" ]]; then
+	purplefin_firstboot_log "downloaded Bitwarden desktop file is not the expected bitwarden RPM"
+	exit 1
+fi
 run_rpm_ostree install --idempotent "${desktop_rpm}"
 rm -f "${desktop_rpm}"
 

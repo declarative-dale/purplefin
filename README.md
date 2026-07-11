@@ -84,13 +84,21 @@ tag for the full Dell IPU7 profile or `dell-xps-9350-intel-no-ipu7` for the
 Dell no-camera test profile. Both Dell profiles bake a pinned mainline
 `7.1.x` kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
 their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
-base image also bakes in the native `bw` Bitwarden CLI under `/usr/bin`.
-Bitwarden desktop is staged from the native Linux RPM by a base first-boot
-rpm-ostree task and becomes available after the reboot into that staged
-deployment. Both Dell profiles bake in `1password-cli`; the 1Password desktop
-RPM is layered by a first-boot rpm-ostree task and becomes available after the
-reboot into that staged deployment. Both Dell profiles also install Librepods
-at `/usr/bin/librepods` from the `librepods` artifact produced by the latest
+base image also bakes Bitwarden's official native `bw` CLI inside a
+Purplefin-built RPM, Fedora's `wireguard-tools`, and a launchable NetworkManager
+connection editor for the preferred native WireGuard UI. Inherited Tailscale
+packages, services, repositories, setup hooks, and user-facing tips are removed
+from every profile. Terra's Bitwarden packages are excluded so future DNF
+operations continue to prefer the official-source Purplefin package.
+
+Bitwarden desktop is staged from Bitwarden's official native Linux RPM by a
+base first-boot rpm-ostree task and becomes available after the reboot into
+that staged deployment. Direct image installation is not used because the RPM
+writes to `/opt`, which is persistent `/var` territory in bootc images. Both
+Dell profiles bake in `1password-cli`; the 1Password desktop RPM is layered by
+a first-boot rpm-ostree task and becomes available after the reboot into that
+staged deployment. Both Dell profiles also install Librepods at
+`/usr/bin/librepods` from the `librepods` artifact produced by the latest
 successful upstream Linux Rust workflow run recorded in
 `/usr/share/purplefin/librepods.provenance`.
 
@@ -176,8 +184,13 @@ dozens of non-working IPU7 inputs.
   intentionally excluded from this manifest and installed natively instead.
 - Homebrew `Brewfile` generated from this laptop.
 - Image-baked Packer, Ansible, OpenTofu, and OpenBao tooling for every profile.
-- Native Bitwarden CLI under `/usr/bin/bw` plus a base first-boot rpm-ostree
-  task that layers the native Bitwarden desktop RPM.
+- Bitwarden's official native CLI payload under `/usr/bin/bw`, wrapped without
+  modification in a Purplefin-built RPM, plus a base first-boot rpm-ostree task
+  that layers Bitwarden's official native desktop RPM.
+- Fedora `wireguard-tools` and the launchable NetworkManager connection editor
+  as the native WireGuard CLI and GUI for every profile.
+- Removal of inherited Tailscale packages, enabled services, and RPM repository
+  configuration from every profile.
 - A first-boot, idempotent Homebrew bundle service.
 - Vates planet boot, Plymouth, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
