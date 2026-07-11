@@ -121,6 +121,8 @@ check:
     grep -qF 'KERNEL_SRC="/usr/lib/modules/${target_release}/build"' build_files/profiles/dell-xps-9350-intel.sh
     grep -qF '/updates/purplefin/intel_cvs.ko' build_files/profiles/dell-xps-9350-intel.sh
     grep -qF 'ipu7_fw.bin${suffix}' build_files/profiles/dell-xps-9350-intel.sh
+    grep -qF 'kernel-devel-matched-${target_evr}.${target_arch}' build_files/profiles/dell-xps-9350-intel.sh
+    grep -qF 'dnf5 -y remove "${cleanup_packages[@]}"' build_files/profiles/dell-xps-9350-intel.sh
     for package in libcamera libcamera-ipa libcamera-tools pipewire-plugin-libcamera; do
         grep -qE "^[[:space:]]*${package}$" build_files/profiles/dell-xps-9350-intel.sh
     done

@@ -167,9 +167,13 @@ assert_ipu7_firmware_present() {
 install_intel_cvs_module() {
 	local target_release="$1"
 	local kernel_devel_spec="$2"
-	local source_root checkout actual_ref vermagic installed_module package
+	local target_evr target_arch source_root checkout actual_ref vermagic installed_module package spec
 	local build_packages=(git gcc make "${kernel_devel_spec}")
 	local temporary_build_packages=()
+	local cleanup_packages=()
+
+	target_evr="${target_release%.*}"
+	target_arch="${target_release##*.}"
 
 	for package in "${build_packages[@]}"; do
 		if ! rpm -q "${package}" >/dev/null 2>&1; then
@@ -228,9 +232,23 @@ EOF
 	fi
 
 	rm -rf "${source_root}"
-	if ((${#temporary_build_packages[@]} > 0)); then
-		echo ":: Removing temporary Intel CVS build packages and their unused dependencies"
-		dnf5 -y remove "${temporary_build_packages[@]}"
+	for package in "${temporary_build_packages[@]}"; do
+		if [[ "${package}" != "${kernel_devel_spec}" ]]; then
+			cleanup_packages+=("${package}")
+		fi
+	done
+	cleanup_packages+=("${kernel_devel_spec}")
+	for spec in \
+		"kernel-devel-matched-${target_evr}.${target_arch}" \
+		"kernel-devel-matched-${target_evr}.noarch"; do
+		if rpm -q "${spec}" >/dev/null 2>&1; then
+			cleanup_packages+=("${spec}")
+		fi
+	done
+
+	if ((${#cleanup_packages[@]} > 0)); then
+		echo ":: Removing Intel CVS build-only packages and their unused dependencies"
+		dnf5 -y remove "${cleanup_packages[@]}"
 	fi
 }
 
