@@ -247,8 +247,8 @@ EOF
 	done
 
 	if ((${#cleanup_packages[@]} > 0)); then
-		echo ":: Removing Intel CVS build-only packages and their unused dependencies"
-		dnf5 -y remove "${cleanup_packages[@]}"
+		echo ":: Removing Intel CVS build-only kernel packages"
+		dnf5 -y remove --no-autoremove "${cleanup_packages[@]}"
 	fi
 }
 
