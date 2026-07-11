@@ -130,6 +130,34 @@ else
 	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for profile ${profile}"
 fi
 
+if [[ -z "${PURPLEFIN_OSTREE_LINUX:-}" ]]; then
+	echo 'PURPLEFIN_OSTREE_LINUX is required so the OCI kernel label matches the image payload' >&2
+	exit 1
+fi
+mapfile -t installed_kernel_releases < <(rpm -q --qf '%{EVR}.%{ARCH}\n' kernel-core)
+if ((${#installed_kernel_releases[@]} != 1)) || [[ "${installed_kernel_releases[0]}" != "${PURPLEFIN_OSTREE_LINUX}" ]]; then
+	echo "Kernel payload does not match ostree.linux=${PURPLEFIN_OSTREE_LINUX}: ${installed_kernel_releases[*]:-none}" >&2
+	exit 1
+fi
+while IFS= read -r -d '' modules_dir; do
+	if [[ "$(basename "${modules_dir}")" != "${PURPLEFIN_OSTREE_LINUX}" ]]; then
+		while IFS= read -r -d '' module_file; do
+			if owner="$(rpm -qf --qf '%{NAME}' "${module_file}" 2>/dev/null)"; then
+				echo "Refusing to prune ${modules_dir}; ${module_file} is still owned by ${owner}" >&2
+				exit 1
+			fi
+		done < <(find "${modules_dir}" \( -type f -o -type l \) -print0)
+		echo ":: Removing stale module tree ${modules_dir}"
+		rm -rf "${modules_dir}"
+	fi
+done < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -print0)
+test -f "/usr/lib/modules/${PURPLEFIN_OSTREE_LINUX}/vmlinuz"
+test -f "/usr/lib/modules/${PURPLEFIN_OSTREE_LINUX}/initramfs.img"
+
+# Package transactions can recreate completions owned by otherwise retained shells.
+rm -f /usr/share/fish/completions/tailscale.fish
+test ! -e /usr/share/fish/completions/tailscale.fish
+
 dnf5 clean all
 rm -f /boot/symvers-*.xz
 rm -rf /run/dnf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache /var/lib/authselect/backups /var/lib/dnf/repos /var/lib/dnf/system-repo.lock /var/lib/rpm-state /var/log/dnf5.log*

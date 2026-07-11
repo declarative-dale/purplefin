@@ -10,12 +10,14 @@ ARG PURPLEFIN_DELL_IPU7_KERNEL_EVR=
 ARG PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED=0
 ARG PURPLEFIN_DELL_MAINLINE_KERNEL_EVR=
 ARG PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED=0
+ARG PURPLEFIN_OSTREE_LINUX=
 
 LABEL org.opencontainers.image.title="Purplefin"
 LABEL org.opencontainers.image.description="A custom Bluefin image with selectable hardware profiles"
 LABEL org.opencontainers.image.vendor="${IMAGE_VENDOR}"
 LABEL org.opencontainers.image.source="https://github.com/declarative-dale/purplefin"
 LABEL org.opencontainers.image.base.name="${BASE_IMAGE}:${BASE_TAG}"
+LABEL ostree.linux="${PURPLEFIN_OSTREE_LINUX}"
 
 COPY system_files/ /
 COPY manifests/Brewfile /usr/share/purplefin/manifests/Brewfile
@@ -27,6 +29,7 @@ RUN PURPLEFIN_DELL_IPU7_KERNEL_EVR="${PURPLEFIN_DELL_IPU7_KERNEL_EVR}" \
     PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED="${PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED}" \
     PURPLEFIN_DELL_MAINLINE_KERNEL_EVR="${PURPLEFIN_DELL_MAINLINE_KERNEL_EVR}" \
     PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED="${PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED}" \
+    PURPLEFIN_OSTREE_LINUX="${PURPLEFIN_OSTREE_LINUX}" \
     /tmp/purplefin-build/build.sh "${BUILD_PROFILE}" && \
     rm -rf /tmp/purplefin-build /tmp/purplefin-profile-files && \
     bootc container lint && \

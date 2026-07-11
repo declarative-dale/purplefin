@@ -13,47 +13,62 @@ purplefin_dell_ipu7_default_kernel_evr() {
 	printf '%s\n' "${PURPLEFIN_DELL_IPU7_DEFAULT_KERNEL_EVR:-7.1.2-355.vanilla.fc44}"
 }
 
-purplefin_dell_ipu7_kernel_state_dir() {
-	printf '%s\n' "${PURPLEFIN_DELL_IPU7_STATE_DIR:-/var/lib/purplefin/dell-ipu7}"
+purplefin_dell_ipu7_minimum_kernel_version() {
+	printf '%s\n' "${PURPLEFIN_DELL_IPU7_MINIMUM_KERNEL_VERSION:-7.1.2}"
 }
 
-purplefin_dell_ipu7_kernel_pending_file() {
-	printf '%s/kernel-staged.pending\n' "$(purplefin_dell_ipu7_kernel_state_dir)"
+purplefin_dell_ipu7_in_tree_cvs_version() {
+	printf '%s\n' "${PURPLEFIN_DELL_IPU7_IN_TREE_CVS_VERSION:-7.2.0}"
 }
 
-purplefin_dell_ipu7_kernel_ok_file() {
-	printf '%s/kernel-booted.ok\n' "$(purplefin_dell_ipu7_kernel_state_dir)"
+purplefin_dell_ipu7_kernel_version_from_evr() {
+	local evr="${1#0:}"
+
+	printf '%s\n' "${evr%%-*}"
+}
+
+purplefin_dell_ipu7_version_at_least() {
+	local candidate="$1"
+	local minimum="$2"
+	local newest
+
+	[[ "${candidate}" =~ ^[0-9]+([.][0-9]+)*$ ]] || return 1
+	[[ "${minimum}" =~ ^[0-9]+([.][0-9]+)*$ ]] || return 1
+	newest="$(printf '%s\n' "${minimum}" "${candidate}" | sort -V | tail -n 1)"
+	[[ "${newest}" == "${candidate}" ]]
 }
 
 purplefin_dell_ipu7_kernel_denylist_file() {
 	printf '%s\n' "${PURPLEFIN_DELL_IPU7_KERNEL_DENYLIST:-/usr/share/purplefin/dell-ipu7/kernel-evr.denylist}"
 }
 
-purplefin_dell_ipu7_uname_r() {
-	if [[ -n "${PURPLEFIN_DELL_IPU7_UNAME_R:-}" ]]; then
-		printf '%s\n' "${PURPLEFIN_DELL_IPU7_UNAME_R}"
-	else
-		uname -r
-	fi
-}
-
-purplefin_dell_ipu7_uname_m() {
-	if [[ -n "${PURPLEFIN_DELL_IPU7_UNAME_M:-}" ]]; then
-		printf '%s\n' "${PURPLEFIN_DELL_IPU7_UNAME_M}"
-	else
-		uname -m
-	fi
-}
-
 purplefin_dell_ipu7_kernel_supported() {
 	local release="${1:-}"
 	local lower
+	local version
 
 	[[ -n "${release}" ]] || return 1
 	lower="${release,,}"
 	[[ "${lower}" != *rc* ]] || return 1
 
-	[[ "${release}" =~ (^|[^0-9])7\.1\.[0-9]+([^0-9]|$) ]]
+	version="$(purplefin_dell_ipu7_kernel_version_from_evr "${release}")"
+	purplefin_dell_ipu7_version_at_least "${version}" "$(purplefin_dell_ipu7_minimum_kernel_version)"
+}
+
+purplefin_dell_ipu7_kernel_uses_in_tree_cvs() {
+	local version
+
+	version="$(purplefin_dell_ipu7_kernel_version_from_evr "$1")"
+	purplefin_dell_ipu7_version_at_least "${version}" "$(purplefin_dell_ipu7_in_tree_cvs_version)"
+}
+
+purplefin_dell_ipu7_keep_inherited_kernel() {
+	local inherited_evr="$1"
+
+	[[ -z "${PURPLEFIN_DELL_IPU7_KERNEL_EVR:-}" ]] || return 1
+	[[ "${PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED:-0}" != "1" ]] || return 1
+	purplefin_dell_ipu7_kernel_supported "${inherited_evr}" || return 1
+	! purplefin_dell_ipu7_kernel_evr_denied "${inherited_evr#0:}"
 }
 
 purplefin_dell_ipu7_kernel_evr_denied() {
@@ -78,159 +93,6 @@ purplefin_dell_ipu7_kernel_release_for_evr_arch() {
 	local arch="$2"
 
 	printf '%s.%s\n' "${evr#0:}" "${arch}"
-}
-
-purplefin_dell_ipu7_booted_kernel_evr() {
-	local release arch
-
-	release="$(purplefin_dell_ipu7_uname_r)"
-	arch="$(purplefin_dell_ipu7_uname_m)"
-
-	if [[ "${release}" == *".${arch}" ]]; then
-		printf '%s\n' "${release%."${arch}"}"
-	else
-		printf '%s\n' "${release}"
-	fi
-}
-
-purplefin_dell_ipu7_kernel_release_matches_evr() {
-	local release="$1"
-	local evr="$2"
-	local arch="${3:-$(purplefin_dell_ipu7_uname_m)}"
-
-	[[ "${release}" == "${evr#0:}" || "${release}" == "$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${evr}" "${arch}")" ]]
-}
-
-purplefin_dell_ipu7_state_value() {
-	local file="$1"
-	local key="$2"
-
-	[[ -f "${file}" ]] || return 1
-	awk -F '=' -v key="${key}" '$1 == key { sub(/^[^=]*=/, ""); print; found = 1; exit } END { exit found ? 0 : 1 }' "${file}"
-}
-
-purplefin_dell_ipu7_state_values() {
-	local file="$1"
-	local key="$2"
-
-	[[ -f "${file}" ]] || return 1
-	awk -F '=' -v key="${key}" '$1 == key { sub(/^[^=]*=/, ""); print; found = 1 } END { exit found ? 0 : 1 }' "${file}"
-}
-
-purplefin_dell_ipu7_pending_kernel_evr() {
-	purplefin_dell_ipu7_state_value "$(purplefin_dell_ipu7_kernel_pending_file)" target_evr
-}
-
-purplefin_dell_ipu7_ok_kernel_evr() {
-	purplefin_dell_ipu7_state_value "$(purplefin_dell_ipu7_kernel_ok_file)" target_evr
-}
-
-purplefin_dell_ipu7_record_kernel_staged() {
-	local evr="$1"
-	local release="$2"
-	shift 2
-	local state_dir pending tmp build_package
-
-	state_dir="$(purplefin_dell_ipu7_kernel_state_dir)"
-	pending="$(purplefin_dell_ipu7_kernel_pending_file)"
-	install -d -m 0755 "${state_dir}"
-	tmp="$(mktemp "${state_dir}/kernel-staged.pending.XXXXXX")"
-	{
-		printf 'target_evr=%s\n' "${evr#0:}"
-		printf 'target_release=%s\n' "${release}"
-		for build_package in "$@"; do
-			printf 'build_package=%s\n' "${build_package}"
-		done
-	} >"${tmp}"
-	chmod 0644 "${tmp}"
-	mv -f "${tmp}" "${pending}"
-	rm -f "$(purplefin_dell_ipu7_kernel_ok_file)"
-}
-
-purplefin_dell_ipu7_record_kernel_booted_ok() {
-	local evr="$1"
-	local release="$2"
-	shift 2
-	local state_dir ok tmp build_package
-
-	state_dir="$(purplefin_dell_ipu7_kernel_state_dir)"
-	ok="$(purplefin_dell_ipu7_kernel_ok_file)"
-	install -d -m 0755 "${state_dir}"
-	tmp="$(mktemp "${state_dir}/kernel-booted.ok.XXXXXX")"
-	{
-		printf 'target_evr=%s\n' "${evr#0:}"
-		printf 'target_release=%s\n' "${release}"
-		for build_package in "$@"; do
-			printf 'build_package=%s\n' "${build_package}"
-		done
-	} >"${tmp}"
-	chmod 0644 "${tmp}"
-	mv -f "${tmp}" "${ok}"
-	rm -f "$(purplefin_dell_ipu7_kernel_pending_file)"
-}
-
-purplefin_dell_ipu7_mark_booted_kernel_ok_if_pending() {
-	local pending evr release
-	local build_packages=()
-
-	pending="$(purplefin_dell_ipu7_kernel_pending_file)"
-	[[ -f "${pending}" ]] || return 1
-
-	evr="$(purplefin_dell_ipu7_state_value "${pending}" target_evr)" || return 1
-	release="$(purplefin_dell_ipu7_uname_r)"
-	if ! purplefin_dell_ipu7_kernel_release_matches_evr "${release}" "${evr}"; then
-		return 1
-	fi
-
-	mapfile -t build_packages < <(purplefin_dell_ipu7_state_values "${pending}" build_package || true)
-	purplefin_dell_ipu7_record_kernel_booted_ok "${evr}" "${release}" "${build_packages[@]}"
-	return 0
-}
-
-purplefin_dell_ipu7_refuse_failed_kernel_stage() {
-	local pending evr release
-
-	pending="$(purplefin_dell_ipu7_kernel_pending_file)"
-	[[ -f "${pending}" ]] || return 1
-
-	evr="$(purplefin_dell_ipu7_state_value "${pending}" target_evr || true)"
-	release="$(purplefin_dell_ipu7_uname_r)"
-	purplefin_dell_ipu7_log "Dell IPU7 kernel ${evr:-unknown} was staged but the system is booted into ${release}; this looks like a failed boot or manual rollback, so IPU7 tasks are stopped until the pending marker is cleared or the target kernel boots"
-	return 0
-}
-
-purplefin_dell_ipu7_assert_booted_kernel() {
-	local release ok_evr
-
-	if purplefin_dell_ipu7_mark_booted_kernel_ok_if_pending; then
-		purplefin_dell_ipu7_log "confirmed boot into staged Dell IPU7 kernel $(purplefin_dell_ipu7_uname_r)"
-	fi
-
-	if purplefin_dell_ipu7_refuse_failed_kernel_stage; then
-		return 1
-	fi
-
-	release="$(purplefin_dell_ipu7_uname_r)"
-	ok_evr="$(purplefin_dell_ipu7_ok_kernel_evr || true)"
-	if [[ -n "${ok_evr}" ]]; then
-		if purplefin_dell_ipu7_kernel_release_matches_evr "${release}" "${ok_evr}"; then
-			return 0
-		fi
-
-		purplefin_dell_ipu7_log "refusing Dell IPU7 setup on ${release}; validated Dell IPU7 kernel is ${ok_evr}"
-		return 1
-	fi
-
-	if [[ "${PURPLEFIN_DELL_IPU7_ALLOW_UNMARKED_KERNEL:-0}" == "1" ]] && purplefin_dell_ipu7_kernel_supported "${release}"; then
-		return 0
-	fi
-
-	if purplefin_dell_ipu7_kernel_supported "${release}"; then
-		purplefin_dell_ipu7_log "refusing Dell IPU7 setup on ${release}; no validated Dell IPU7 kernel marker exists"
-	else
-		purplefin_dell_ipu7_log "refusing Dell IPU7 setup on unsupported kernel ${release}; boot the validated Dell IPU7 Linux 7.1.x kernel first"
-	fi
-	return 1
 }
 
 purplefin_dell_ipu7_select_kernel_evr() {

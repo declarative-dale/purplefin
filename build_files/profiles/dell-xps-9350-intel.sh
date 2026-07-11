@@ -6,7 +6,6 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-activate
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-rebind-sensor
 chmod 0755 /usr/libexec/purplefin/install-librepods
@@ -65,6 +64,76 @@ collect_ipu7_kernel_package_specs() {
 	)"
 	specs="$(printf '%s\n' "${repoquery_output}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery "${evr}" "${arch}" "$@")" || return 1
 	printf '%s\n' "${specs}"
+}
+
+collect_enabled_kernel_package_specs() {
+	local evr="$1"
+	local arch="$2"
+	shift 2
+	local repoquery_output specs
+	local repoquery_format=$'%{name}\t%{evr}\t%{arch}\n'
+
+	repoquery_output="$(
+		dnf5 -q --refresh repoquery --available --qf "${repoquery_format}" "$@" | sort -u
+	)"
+	specs="$(printf '%s\n' "${repoquery_output}" | purplefin_dell_ipu7_collect_package_specs_from_repoquery "${evr}" "${arch}" "$@")" || return 1
+	printf '%s\n' "${specs}"
+}
+
+installed_kernel_core_record() {
+	local records=()
+
+	mapfile -t records < <(rpm -q --qf $'%{version}\t%{evr}\t%{arch}\n' kernel-core)
+	if ((${#records[@]} != 1)); then
+		echo "Dell IPU7 profile requires exactly one inherited kernel-core, found ${#records[@]}" >&2
+		return 1
+	fi
+	printf '%s\n' "${records[0]}"
+}
+
+write_kernel_selection() {
+	local selection_mode="$1"
+	local inherited_version="$2"
+	local inherited_evr="$3"
+	local inherited_release="$4"
+	local target_version="$5"
+	local target_evr="$6"
+	local target_release="$7"
+	local cvs_provider="$8"
+
+	install -d -m 0755 /usr/share/purplefin/dell-ipu7
+	cat >/usr/share/purplefin/dell-ipu7/kernel-selection <<EOF
+selection_mode=${selection_mode}
+minimum_inherited_version=$(purplefin_dell_ipu7_minimum_kernel_version)
+in_tree_cvs_version=$(purplefin_dell_ipu7_in_tree_cvs_version)
+inherited_version=${inherited_version}
+inherited_evr=${inherited_evr}
+inherited_release=${inherited_release}
+target_version=${target_version}
+target_evr=${target_evr}
+target_release=${target_release}
+cvs_provider=${cvs_provider}
+EOF
+}
+
+validate_in_tree_cvs_module() {
+	local target_release="$1"
+	local config_path="$2"
+	local module_path
+
+	grep -Eq '^CONFIG_VIDEO_INTEL_CVS=(y|m)$' "${config_path}" || {
+		echo "Inherited kernel ${target_release} does not enable CONFIG_VIDEO_INTEL_CVS" >&2
+		return 1
+	}
+	module_path="$(modinfo -k "${target_release}" -n intel_cvs)" || return 1
+	case "${module_path}" in
+		*/kernel/drivers/media/i2c/cvs/intel_cvs.ko|*/kernel/drivers/media/i2c/cvs/intel_cvs.ko.xz|*/kernel/drivers/media/i2c/cvs/intel_cvs.ko.zst) ;;
+		*)
+			echo "Inherited kernel ${target_release} resolves intel_cvs to unexpected path ${module_path}" >&2
+			return 1
+			;;
+	esac
+	modinfo -k "${target_release}" -F alias intel_cvs | grep -qx 'acpi\*:INTC10DE:\*'
 }
 
 validate_ipu7_kernel_config_from_rpm() {
@@ -148,6 +217,26 @@ remove_inherited_v4l2loopback_kmods() {
 	fi
 }
 
+remove_incompatible_inherited_kernel_addons() {
+	local packages=(
+		kmod-zfs
+		zfs
+	)
+	local installed=()
+	local package
+
+	for package in "${packages[@]}"; do
+		if rpm -q "${package}" >/dev/null 2>&1; then
+			installed+=("${package}")
+		fi
+	done
+
+	if ((${#installed[@]} > 0)); then
+		echo ":: Removing inherited kernel add-ons without modules for the pinned Dell kernel"
+		dnf5 -y remove --no-autoremove "${installed[@]}"
+	fi
+}
+
 assert_ipu7_firmware_present() {
 	local firmware_root suffix
 
@@ -166,14 +255,19 @@ assert_ipu7_firmware_present() {
 
 install_intel_cvs_module() {
 	local target_release="$1"
-	local kernel_devel_spec="$2"
-	local target_evr target_arch source_root checkout actual_ref vermagic installed_module package spec
+	local target_evr="$2"
+	local target_arch="$3"
+	local kernel_devel_spec="$4"
+	local kernel_devel_cleanup="${5:-always}"
+	local source_root checkout actual_ref vermagic installed_module package spec
+	local kernel_devel_preinstalled=0
 	local build_packages=(git gcc make "${kernel_devel_spec}")
 	local temporary_build_packages=()
 	local cleanup_packages=()
 
-	target_evr="${target_release%.*}"
-	target_arch="${target_release##*.}"
+	if rpm -q "${kernel_devel_spec}" >/dev/null 2>&1; then
+		kernel_devel_preinstalled=1
+	fi
 
 	for package in "${build_packages[@]}"; do
 		if ! rpm -q "${package}" >/dev/null 2>&1; then
@@ -181,8 +275,7 @@ install_intel_cvs_module() {
 		fi
 	done
 
-	echo ":: Installing Fedora libcamera runtime and temporary Intel CVS build dependencies"
-	dnf5 -y install "${camera_runtime_packages[@]}"
+	echo ":: Installing temporary Intel CVS build dependencies"
 	dnf5 -y install "${build_packages[@]}"
 
 	source_root="$(mktemp -d /tmp/purplefin-intel-cvs.XXXXXX)"
@@ -237,14 +330,18 @@ EOF
 			cleanup_packages+=("${package}")
 		fi
 	done
-	cleanup_packages+=("${kernel_devel_spec}")
-	for spec in \
-		"kernel-devel-matched-${target_evr}.${target_arch}" \
-		"kernel-devel-matched-${target_evr}.noarch"; do
-		if rpm -q "${spec}" >/dev/null 2>&1; then
-			cleanup_packages+=("${spec}")
-		fi
-	done
+	if [[ "${kernel_devel_cleanup}" == "always" || "${kernel_devel_preinstalled}" == "0" ]]; then
+		cleanup_packages+=("${kernel_devel_spec}")
+	fi
+	if [[ "${kernel_devel_cleanup}" == "always" ]]; then
+		for spec in \
+			"kernel-devel-matched-${target_evr}.${target_arch}" \
+			"kernel-devel-matched-${target_evr}.noarch"; do
+			if rpm -q "${spec}" >/dev/null 2>&1; then
+				cleanup_packages+=("${spec}")
+			fi
+		done
+	fi
 
 	if ((${#cleanup_packages[@]} > 0)); then
 		echo ":: Removing Intel CVS build-only kernel packages"
@@ -253,8 +350,9 @@ EOF
 }
 
 install_ipu7_kernel() {
-	local target_arch selected_evr target_release
-	local runtime_specs_output build_specs_output
+	local inherited_record inherited_version inherited_evr inherited_arch inherited_release
+	local target_version target_evr target_arch target_release selection_mode cvs_provider config_path
+	local selected_evr runtime_specs_output build_specs_output build_spec
 	local kernel_evrs=()
 	local runtime_specs=()
 	local build_specs=()
@@ -267,37 +365,55 @@ install_ipu7_kernel() {
 		}
 	done
 
-	write_ipu7_kernel_repo
-	mapfile -t kernel_evrs < <(
-		dnf5 -q --refresh --disablerepo='*' --enablerepo="${kernel_repo_id}" repoquery --available --qf "${evr_query_format}" kernel-core | sort -u
-	)
-	selected_evr="$(printf '%s\n' "${kernel_evrs[@]}" | purplefin_dell_ipu7_select_kernel_evr)" || {
-		echo "Pinned Dell IPU7 kernel $(purplefin_dell_ipu7_default_kernel_evr) is not available in ${kernel_repo_id}" >&2
-		exit 1
-	}
-	target_arch="$(purplefin_dell_ipu7_uname_m)"
-	target_release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${selected_evr}" "${target_arch}")"
-
-	runtime_specs_output="$(collect_ipu7_kernel_package_specs "${selected_evr}" "${target_arch}" "${kernel_runtime_packages[@]}")" || {
-		echo "Missing runtime package for coherent Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
-		exit 1
-	}
-	build_specs_output="$(collect_ipu7_kernel_package_specs "${selected_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
-		echo "Missing exact kernel-devel for Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
-		exit 1
-	}
-	mapfile -t runtime_specs <<<"${runtime_specs_output}"
-	mapfile -t build_specs <<<"${build_specs_output}"
-
-	validate_ipu7_kernel_config_from_rpm "${selected_evr}" "${target_arch}" || {
-		echo "Target kernel ${target_release} does not expose the required Dell IPU7 config flags" >&2
-		exit 1
-	}
-
-	echo ":: Installing Dell IPU7 baked kernel ${selected_evr}"
+	inherited_record="$(installed_kernel_core_record)"
+	IFS=$'\t' read -r inherited_version inherited_evr inherited_arch <<<"${inherited_record}"
+	inherited_release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${inherited_evr}" "${inherited_arch}")"
 	remove_inherited_v4l2loopback_kmods
-	dnf5 -y --disablerepo='*' --enablerepo="${kernel_repo_id}" install "${runtime_specs[@]}"
-	remove_non_ipu7_runtime_kernels "${selected_evr}" "${target_arch}"
+
+	if purplefin_dell_ipu7_keep_inherited_kernel "${inherited_evr}"; then
+		selection_mode='inherited-bluefin'
+		target_version="${inherited_version}"
+		target_evr="${inherited_evr}"
+		target_arch="${inherited_arch}"
+		target_release="${inherited_release}"
+		echo ":: Keeping inherited Bluefin kernel ${target_release}; it meets the $(purplefin_dell_ipu7_minimum_kernel_version) handoff threshold"
+	else
+		selection_mode='pinned-fallback'
+		write_ipu7_kernel_repo
+		mapfile -t kernel_evrs < <(
+			dnf5 -q --refresh --disablerepo='*' --enablerepo="${kernel_repo_id}" repoquery --available --qf "${evr_query_format}" kernel-core | sort -u
+		)
+		selected_evr="$(printf '%s\n' "${kernel_evrs[@]}" | purplefin_dell_ipu7_select_kernel_evr)" || {
+			echo "Pinned Dell IPU7 kernel $(purplefin_dell_ipu7_default_kernel_evr) is not available in ${kernel_repo_id}" >&2
+			exit 1
+		}
+		target_evr="${selected_evr}"
+		target_arch="${inherited_arch}"
+		target_version="$(purplefin_dell_ipu7_kernel_version_from_evr "${target_evr}")"
+		target_release="$(purplefin_dell_ipu7_kernel_release_for_evr_arch "${target_evr}" "${target_arch}")"
+
+		runtime_specs_output="$(collect_ipu7_kernel_package_specs "${target_evr}" "${target_arch}" "${kernel_runtime_packages[@]}")" || {
+			echo "Missing runtime package for coherent Dell IPU7 kernel ${target_evr} in ${kernel_repo_id}" >&2
+			exit 1
+		}
+		build_specs_output="$(collect_ipu7_kernel_package_specs "${target_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
+			echo "Missing exact kernel-devel for Dell IPU7 kernel ${target_evr} in ${kernel_repo_id}" >&2
+			exit 1
+		}
+		mapfile -t runtime_specs <<<"${runtime_specs_output}"
+		mapfile -t build_specs <<<"${build_specs_output}"
+
+		validate_ipu7_kernel_config_from_rpm "${target_evr}" "${target_arch}" || {
+			echo "Target kernel ${target_release} does not expose the required Dell IPU7 config flags" >&2
+			exit 1
+		}
+
+		echo ":: Bluefin kernel ${inherited_release} is below the handoff threshold; installing pinned Dell IPU7 kernel ${target_evr}"
+		remove_incompatible_inherited_kernel_addons
+		dnf5 -y --disablerepo='*' --enablerepo="${kernel_repo_id}" install "${runtime_specs[@]}"
+		remove_non_ipu7_runtime_kernels "${target_evr}" "${target_arch}"
+	fi
+
 	assert_ipu7_firmware_present
 
 	test -d "/usr/lib/modules/${target_release}" || {
@@ -308,8 +424,53 @@ install_ipu7_kernel() {
 		echo "Dell IPU7 kernel initramfs /usr/lib/modules/${target_release}/initramfs.img was not installed" >&2
 		exit 1
 	}
-	printf '%s\n' "${build_specs[@]}" > /usr/share/purplefin/dell-ipu7/kernel-build-packages
-	install_intel_cvs_module "${target_release}" "${build_specs[0]}"
+	config_path="$(purplefin_dell_ipu7_find_local_kernel_config "${target_release}")" || {
+		echo "Dell IPU7 kernel config for ${target_release} is missing" >&2
+		exit 1
+	}
+	purplefin_dell_ipu7_validate_kernel_config_file "${config_path}"
+
+	echo ":: Installing Fedora libcamera runtime"
+	dnf5 -y install "${camera_runtime_packages[@]}"
+
+	if purplefin_dell_ipu7_kernel_uses_in_tree_cvs "${target_evr}"; then
+		cvs_provider='in-tree'
+		echo ":: Validating in-tree Intel CVS from inherited kernel ${target_release}"
+		validate_in_tree_cvs_module "${target_release}" "${config_path}"
+		rm -f /usr/share/purplefin/dell-ipu7/kernel-build-packages
+	else
+		cvs_provider='external-intel-vision-drivers'
+		if [[ "${selection_mode}" == 'pinned-fallback' ]]; then
+			build_spec="${build_specs[0]}"
+		else
+			build_spec="kernel-devel-${target_evr}.${target_arch}"
+			if ! rpm -q "${build_spec}" >/dev/null 2>&1; then
+				build_specs_output="$(collect_enabled_kernel_package_specs "${target_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
+					echo "Missing exact kernel-devel for inherited Bluefin kernel ${target_release}" >&2
+					exit 1
+				}
+				mapfile -t build_specs <<<"${build_specs_output}"
+				build_spec="${build_specs[0]}"
+			fi
+		fi
+		printf '%s\n' "${build_spec}" > /usr/share/purplefin/dell-ipu7/kernel-build-packages
+		if [[ "${selection_mode}" == 'pinned-fallback' ]]; then
+			install_intel_cvs_module "${target_release}" "${target_evr}" "${target_arch}" "${build_spec}" always
+		else
+			install_intel_cvs_module "${target_release}" "${target_evr}" "${target_arch}" "${build_spec}" if-added
+		fi
+	fi
+
+	write_kernel_selection \
+		"${selection_mode}" \
+		"${inherited_version}" \
+		"${inherited_evr}" \
+		"${inherited_release}" \
+		"${target_version}" \
+		"${target_evr}" \
+		"${target_release}" \
+		"${cvs_provider}"
+	rm -f "${kernel_repo_file}"
 }
 
 install_ipu7_kernel

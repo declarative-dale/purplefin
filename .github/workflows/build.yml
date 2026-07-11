@@ -33,6 +33,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve boot kernel metadata
+        id: kernel
+        shell: bash
+        run: |
+          base_kernel="$(skopeo inspect --retry-times 3 docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
+          target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.profile }}' "${base_kernel}")"
+          echo "release=${target_kernel}" >> "${GITHUB_OUTPUT}"
+
       - name: Build image
         id: build
         uses: redhat-actions/buildah-build@v2
@@ -44,6 +52,9 @@ jobs:
             BUILD_PROFILE=${{ matrix.profile }}
             BASE_IMAGE=ghcr.io/ublue-os/bluefin
             BASE_TAG=stable
+            PURPLEFIN_OSTREE_LINUX=${{ steps.kernel.outputs.release }}
+          labels: |
+            ostree.linux=${{ steps.kernel.outputs.release }}
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'

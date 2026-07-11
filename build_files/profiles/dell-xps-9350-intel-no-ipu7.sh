@@ -168,7 +168,9 @@ remove_non_target_runtime_kernels() {
 remove_inherited_v4l2loopback_kmods() {
 	local packages=(
 		kmod-v4l2loopback
+		kmod-zfs
 		v4l2loopback
+		zfs
 	)
 	local installed=()
 	local package
@@ -180,7 +182,7 @@ remove_inherited_v4l2loopback_kmods() {
 	done
 
 	if ((${#installed[@]} > 0)); then
-		echo ":: Removing inherited prebuilt v4l2loopback kmods before mainline kernel install"
+		echo ":: Removing inherited kernel add-ons without modules for the mainline kernel"
 		dnf5 -y remove --no-autoremove "${installed[@]}"
 	fi
 }
