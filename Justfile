@@ -57,6 +57,7 @@ check:
     grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/build.sh
     grep -qF 'rm -f /etc/yum.repos.d/tailscale.repo' build_files/build.sh
     grep -qF 'rm -f /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' build_files/build.sh
+    grep -qF 'rm -f /usr/share/fish/completions/tailscale.fish' build_files/build.sh
     grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/build.sh
     grep -qF "sed -i '/^Tailscale is included,/d'" build_files/build.sh
     test -f system_files/etc/skel/.config/ghostty/config.ghostty

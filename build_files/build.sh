@@ -30,6 +30,7 @@ echo ":: Removing inherited Tailscale"
 systemctl disable tailscaled.service >/dev/null 2>&1 || true
 rm -f /etc/yum.repos.d/tailscale.repo
 rm -f /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh
+rm -f /usr/share/fish/completions/tailscale.fish
 if [[ -f /etc/dnf/repos.override.d/99-config_manager.repo ]]; then
 	sed -i '/^\[tailscale-stable\]$/,+1d' /etc/dnf/repos.override.d/99-config_manager.repo
 fi
@@ -55,6 +56,7 @@ for path in \
 	/etc/systemd/system/multi-user.target.wants/tailscaled.service \
 	/etc/yum.repos.d/tailscale.repo \
 	/usr/lib/systemd/system/tailscaled.service \
+	/usr/share/fish/completions/tailscale.fish \
 	/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh; do
 	if [[ -e "${path}" || -L "${path}" ]]; then
 		echo "Inherited Tailscale path is still present: ${path}" >&2
