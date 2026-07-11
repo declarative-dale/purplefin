@@ -323,7 +323,7 @@ purplefin_dell_ipu7_collect_package_specs_from_repoquery() {
 }
 
 purplefin_dell_ipu7_required_kernel_configs() {
-	local configs="${PURPLEFIN_DELL_IPU7_REQUIRED_KERNEL_CONFIGS:-CONFIG_IPU_BRIDGE CONFIG_INTEL_SKL_INT3472 CONFIG_VIDEO_INTEL_IPU7 CONFIG_VIDEO_OV08X40}"
+	local configs="${PURPLEFIN_DELL_IPU7_REQUIRED_KERNEL_CONFIGS:-CONFIG_IPU_BRIDGE CONFIG_VIDEO_INTEL_IPU7 CONFIG_VIDEO_OV02C10 CONFIG_USB_USBIO CONFIG_GPIO_USBIO CONFIG_I2C_USBIO}"
 
 	printf '%s\n' ${configs}
 }
@@ -375,43 +375,6 @@ purplefin_dell_ipu7_fstab_has_root_mount_entry() {
 	' "${fstab}"
 }
 
-purplefin_dell_ipu7_kernel_build_packages_from_state() {
-	local ok pending file
-
-	ok="$(purplefin_dell_ipu7_kernel_ok_file)"
-	pending="$(purplefin_dell_ipu7_kernel_pending_file)"
-	file=""
-	if [[ -f "${ok}" ]]; then
-		file="${ok}"
-	elif [[ -f "${pending}" ]]; then
-		file="${pending}"
-	fi
-
-	if [[ -n "${file}" ]]; then
-		purplefin_dell_ipu7_state_values "${file}" build_package
-		return $?
-	fi
-
-	return 1
-}
-
-purplefin_dell_ipu7_default_kernel_build_packages() {
-	local evr="${1:-$(purplefin_dell_ipu7_booted_kernel_evr)}"
-	local arch="${2:-$(purplefin_dell_ipu7_uname_m)}"
-
-	printf 'kernel-devel-%s.%s\n' "${evr#0:}" "${arch}"
-	printf 'kernel-devel-matched-%s.noarch\n' "${evr#0:}"
-	printf 'kernel-headers-%s.%s\n' "${evr#0:}" "${arch}"
-}
-
-purplefin_dell_ipu7_effective_kernel_build_packages() {
-	if purplefin_dell_ipu7_kernel_build_packages_from_state; then
-		return 0
-	fi
-
-	purplefin_dell_ipu7_default_kernel_build_packages
-}
-
 purplefin_dell_ipu7_kernel_repo_id() {
 	printf '%s\n' "${PURPLEFIN_DELL_IPU7_KERNEL_REPO_ID:-copr:copr.fedorainfracloud.org:group_kernel-vanilla:stable}"
 }
@@ -422,35 +385,4 @@ purplefin_dell_ipu7_kernel_repo_baseurl() {
 
 purplefin_dell_ipu7_kernel_repo_gpgkey() {
 	printf '%s\n' "${PURPLEFIN_DELL_IPU7_KERNEL_REPO_GPGKEY:-https://download.copr.fedorainfracloud.org/results/@kernel-vanilla/stable/pubkey.gpg}"
-}
-
-purplefin_dell_ipu7_validate_installed_kernel_build_stack() {
-	local release evr arch build_link
-
-	release="$(purplefin_dell_ipu7_uname_r)"
-	evr="$(purplefin_dell_ipu7_booted_kernel_evr)"
-	arch="$(purplefin_dell_ipu7_uname_m)"
-	build_link="/usr/lib/modules/${release}/build"
-
-	command -v rpm >/dev/null 2>&1 || {
-		purplefin_dell_ipu7_log "rpm is required to validate Dell IPU7 kernel build packages"
-		return 1
-	}
-
-	rpm -q --whatprovides "kernel-devel-uname-r = ${release}" >/dev/null 2>&1 || {
-		purplefin_dell_ipu7_log "kernel-devel for ${release} is missing; install the exact Dell IPU7 kernel-devel package before DKMS"
-		return 1
-	}
-	rpm -q "kernel-devel-matched-${evr}.noarch" >/dev/null 2>&1 || rpm -q "kernel-devel-matched-${evr}.${arch}" >/dev/null 2>&1 || {
-		purplefin_dell_ipu7_log "kernel-devel-matched for ${evr} is missing or mismatched"
-		return 1
-	}
-	rpm -q "kernel-headers-${evr}.${arch}" >/dev/null 2>&1 || {
-		purplefin_dell_ipu7_log "kernel-headers for ${evr}.${arch} is missing or mismatched"
-		return 1
-	}
-	[[ -e "${build_link}/Makefile" ]] || {
-		purplefin_dell_ipu7_log "kernel build tree ${build_link} is missing"
-		return 1
-	}
 }

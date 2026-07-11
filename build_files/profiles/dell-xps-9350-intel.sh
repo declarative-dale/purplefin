@@ -7,10 +7,8 @@ echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/30-dell-ipu7-build-deps
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/40-dell-ipu7-dkms-userspace
-chmod 0755 /usr/libexec/purplefin/dell-ipu7-patch-psys-debugfs
-chmod 0755 /usr/libexec/purplefin/dell-ipu7-setup
+chmod 0755 /usr/libexec/purplefin/dell-ipu7-activate
+chmod 0755 /usr/libexec/purplefin/dell-ipu7-rebind-sensor
 chmod 0755 /usr/libexec/purplefin/install-librepods
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
@@ -28,8 +26,14 @@ kernel_runtime_packages=(
 )
 kernel_build_packages=(
 	kernel-devel
-	kernel-devel-matched
-	kernel-headers
+)
+intel_cvs_repo="https://github.com/intel/vision-drivers.git"
+intel_cvs_ref="845d6f8bdf66ff1f455901da9de5e00a53a83dce"
+camera_runtime_packages=(
+	libcamera
+	libcamera-ipa
+	libcamera-tools
+	pipewire-plugin-libcamera
 )
 
 write_ipu7_kernel_repo() {
@@ -144,6 +148,92 @@ remove_inherited_v4l2loopback_kmods() {
 	fi
 }
 
+assert_ipu7_firmware_present() {
+	local firmware_root suffix
+
+	for firmware_root in /usr/lib/firmware/intel/ipu /lib/firmware/intel/ipu; do
+		for suffix in '' .xz .zst; do
+			if [[ -f "${firmware_root}/ipu7_fw.bin${suffix}" ]]; then
+				echo ":: Found Dell IPU7 firmware ${firmware_root}/ipu7_fw.bin${suffix}"
+				return 0
+			fi
+		done
+	done
+
+	echo "Dell IPU7 firmware ipu7_fw.bin, ipu7_fw.bin.xz, or ipu7_fw.bin.zst is missing" >&2
+	exit 1
+}
+
+install_intel_cvs_module() {
+	local target_release="$1"
+	local kernel_devel_spec="$2"
+	local source_root checkout actual_ref vermagic installed_module package
+	local build_packages=(git gcc make "${kernel_devel_spec}")
+	local temporary_build_packages=()
+
+	for package in "${build_packages[@]}"; do
+		if ! rpm -q "${package}" >/dev/null 2>&1; then
+			temporary_build_packages+=("${package}")
+		fi
+	done
+
+	echo ":: Installing Fedora libcamera runtime and temporary Intel CVS build dependencies"
+	dnf5 -y install "${camera_runtime_packages[@]}"
+	dnf5 -y install "${build_packages[@]}"
+
+	source_root="$(mktemp -d /tmp/purplefin-intel-cvs.XXXXXX)"
+	checkout="${source_root}/vision-drivers"
+	git init -q "${checkout}"
+	git -C "${checkout}" remote add origin "${intel_cvs_repo}"
+	git -C "${checkout}" fetch --depth 1 origin "${intel_cvs_ref}"
+	git -C "${checkout}" checkout --quiet --detach FETCH_HEAD
+	actual_ref="$(git -C "${checkout}" rev-parse HEAD)"
+	if [[ "${actual_ref}" != "${intel_cvs_ref}" ]]; then
+		echo "Intel CVS checkout resolved to ${actual_ref}, expected ${intel_cvs_ref}" >&2
+		exit 1
+	fi
+
+	echo ":: Building Intel CVS ${intel_cvs_ref} for ${target_release}"
+	make -C "${checkout}" \
+		KERNELRELEASE="${target_release}" \
+		KERNEL_SRC="/usr/lib/modules/${target_release}/build"
+
+	vermagic="$(modinfo -F vermagic "${checkout}/intel_cvs.ko")"
+	if [[ "${vermagic%% *}" != "${target_release}" ]]; then
+		echo "Intel CVS module vermagic ${vermagic} does not match ${target_release}" >&2
+		exit 1
+	fi
+	if ! modinfo -F alias "${checkout}/intel_cvs.ko" | grep -qx 'acpi\*:INTC10DE:\*'; then
+		echo "Intel CVS module does not advertise the Dell Lunar Lake INTC10DE device" >&2
+		exit 1
+	fi
+
+	install -D -m 0644 "${checkout}/intel_cvs.ko" \
+		"/usr/lib/modules/${target_release}/updates/purplefin/intel_cvs.ko"
+	install -D -m 0644 "${checkout}/LICENSE.txt" \
+		/usr/share/licenses/purplefin-intel-cvs/LICENSE.txt
+	install -d -m 0755 /usr/share/purplefin/dell-ipu7
+	cat >/usr/share/purplefin/dell-ipu7/intel-cvs.provenance <<EOF
+source_repo=${intel_cvs_repo}
+source_commit=${intel_cvs_ref}
+kernel_release=${target_release}
+EOF
+
+	depmod -a "${target_release}"
+	installed_module="$(modinfo -k "${target_release}" -n intel_cvs)"
+	if [[ "${installed_module}" != "/lib/modules/${target_release}/updates/purplefin/intel_cvs.ko" &&
+		"${installed_module}" != "/usr/lib/modules/${target_release}/updates/purplefin/intel_cvs.ko" ]]; then
+		echo "modinfo resolved intel_cvs to unexpected path ${installed_module}" >&2
+		exit 1
+	fi
+
+	rm -rf "${source_root}"
+	if ((${#temporary_build_packages[@]} > 0)); then
+		echo ":: Removing temporary Intel CVS build packages and their unused dependencies"
+		dnf5 -y remove "${temporary_build_packages[@]}"
+	fi
+}
+
 install_ipu7_kernel() {
 	local target_arch selected_evr target_release
 	local runtime_specs_output build_specs_output
@@ -175,7 +265,7 @@ install_ipu7_kernel() {
 		exit 1
 	}
 	build_specs_output="$(collect_ipu7_kernel_package_specs "${selected_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
-		echo "Missing kernel-devel, kernel-devel-matched, or kernel-headers for Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
+		echo "Missing exact kernel-devel for Dell IPU7 kernel ${selected_evr} in ${kernel_repo_id}" >&2
 		exit 1
 	}
 	mapfile -t runtime_specs <<<"${runtime_specs_output}"
@@ -190,6 +280,7 @@ install_ipu7_kernel() {
 	remove_inherited_v4l2loopback_kmods
 	dnf5 -y --disablerepo='*' --enablerepo="${kernel_repo_id}" install "${runtime_specs[@]}"
 	remove_non_ipu7_runtime_kernels "${selected_evr}" "${target_arch}"
+	assert_ipu7_firmware_present
 
 	test -d "/usr/lib/modules/${target_release}" || {
 		echo "Dell IPU7 kernel modules directory /usr/lib/modules/${target_release} was not installed" >&2
@@ -200,9 +291,13 @@ install_ipu7_kernel() {
 		exit 1
 	}
 	printf '%s\n' "${build_specs[@]}" > /usr/share/purplefin/dell-ipu7/kernel-build-packages
+	install_intel_cvs_module "${target_release}" "${build_specs[0]}"
 }
 
 install_ipu7_kernel
+
+echo ":: Enabling Dell IPU7 CVS activation and OV02C10 reprobe"
+systemctl enable purplefin-dell-ipu7-camera.service
 
 echo ":: Installing Librepods from pinned GitHub Actions artifact"
 /usr/libexec/purplefin/install-librepods

@@ -12,8 +12,6 @@ repo_tmp="$(mktemp)"
 
 kernel_build_packages=(
 	kernel-devel
-	kernel-devel-matched
-	kernel-headers
 )
 
 fail() {
@@ -97,7 +95,7 @@ else
 		fail "dnf5 is required to query ${repo_id} for Dell IPU7 kernel build packages"
 	fi
 	build_specs_output="$(collect_package_specs "${target_evr}" "${target_arch}" "${kernel_build_packages[@]}")" || {
-		fail "missing kernel-devel, kernel-devel-matched, or kernel-headers for Dell IPU7 kernel ${target_evr} in ${repo_id}"
+		fail "missing exact kernel-devel for Dell IPU7 kernel ${target_evr} in ${repo_id}"
 	}
 	mapfile -t build_specs <<<"${build_specs_output}"
 fi
