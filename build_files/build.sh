@@ -30,6 +30,21 @@ fi
 echo ":: Installing common Purplefin RPM overlays"
 dnf5 -y install ghostty
 dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
+infrastructure_packages=(
+	ansible
+	openbao
+	opentofu
+	packer
+)
+dnf5 -y install "${infrastructure_packages[@]}"
+
+for package in "${infrastructure_packages[@]}"; do
+	rpm -q "${package}"
+done
+for command in ansible bao packer tofu; do
+	command -v "${command}" >/dev/null
+done
+
 /usr/libexec/purplefin/install-bitwarden-cli-native
 
 if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then

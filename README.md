@@ -82,14 +82,16 @@ Reboot after switching.
 The `latest` tag tracks the generic profile. Use the `dell-xps-9350-intel`
 tag for the full Dell IPU7 profile or `dell-xps-9350-intel-no-ipu7` for the
 Dell no-camera test profile. Both Dell profiles bake a pinned mainline
-`7.1.x` kernel. The base image bakes in the native `bw` Bitwarden CLI under
-`/usr/bin`. Bitwarden desktop is staged from the native Linux RPM by a base
-first-boot rpm-ostree task and becomes available after the reboot into that
-staged deployment. Both Dell profiles bake in `1password-cli`; the 1Password
-desktop RPM is layered by a first-boot rpm-ostree task and becomes available
-after the reboot into that staged deployment. Both Dell profiles also install
-Librepods at `/usr/bin/librepods` from the `librepods` artifact produced by the
-latest successful upstream Linux Rust workflow run recorded in
+`7.1.x` kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
+their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
+base image also bakes in the native `bw` Bitwarden CLI under `/usr/bin`.
+Bitwarden desktop is staged from the native Linux RPM by a base first-boot
+rpm-ostree task and becomes available after the reboot into that staged
+deployment. Both Dell profiles bake in `1password-cli`; the 1Password desktop
+RPM is layered by a first-boot rpm-ostree task and becomes available after the
+reboot into that staged deployment. Both Dell profiles also install Librepods
+at `/usr/bin/librepods` from the `librepods` artifact produced by the latest
+successful upstream Linux Rust workflow run recorded in
 `/usr/share/purplefin/librepods.provenance`.
 
 ## Dell IPU7 Camera Flow
@@ -187,6 +189,7 @@ path when `/dev/ipu7-psys0` is absent.
 - System Flatpak preinstall manifest generated from this laptop. Bitwarden is
   intentionally excluded from this manifest and installed natively instead.
 - Homebrew `Brewfile` generated from this laptop.
+- Image-baked Packer, Ansible, OpenTofu, and OpenBao tooling for every profile.
 - Native Bitwarden CLI under `/usr/bin/bw` plus a base first-boot rpm-ostree
   task that layers the native Bitwarden desktop RPM.
 - A first-boot, idempotent Homebrew bundle service.
