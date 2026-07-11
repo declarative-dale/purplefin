@@ -48,6 +48,17 @@ check:
     test ! -e system_files/etc/xdg/xdg-terminals.list
     test ! -e system_files/etc/xdg/gnome-xdg-terminals.list
     grep -qx 'excludepkgs=1password\*' system_files/etc/yum.repos.d/terra.repo
+    test -f system_files/etc/yum.repos.d/hashicorp.repo
+    grep -qx '\[hashicorp\]' system_files/etc/yum.repos.d/hashicorp.repo
+    grep -qx 'baseurl=https://rpm.releases.hashicorp.com/fedora/\$releasever/\$basearch/stable' system_files/etc/yum.repos.d/hashicorp.repo
+    grep -qx 'gpgkey=https://rpm.releases.hashicorp.com/gpg' system_files/etc/yum.repos.d/hashicorp.repo
+    for package in ansible openbao opentofu packer; do
+        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
+    done
+    grep -qF 'dnf5 -y install "${infrastructure_packages[@]}"' build_files/build.sh
+    grep -qF 'for command in ansible bao packer tofu' build_files/build.sh
+    test -f system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf
+    grep -qx 'd /var/lib/openbao 0700 openbao openbao - -' system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf
     test -f system_files/usr/share/plymouth/themes/spinner/watermark.png
     test -f system_files/usr/share/plymouth/themes/spinner/silverblue-watermark.png
     test -f system_files/usr/share/pixmaps/fedora-gdm-logo.png
