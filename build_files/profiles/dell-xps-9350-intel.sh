@@ -8,6 +8,7 @@ cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-activate
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-rebind-sensor
+chmod 0755 /usr/libexec/purplefin/configure-firefox-pipewire-camera
 chmod 0755 /usr/libexec/purplefin/install-librepods
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 

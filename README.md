@@ -162,7 +162,9 @@ The flow is:
    `ov02c10`, covering the early-probe race documented in Fedora bug 2413472.
 5. WirePlumber suppresses the 32 raw V4L2 devices whose description is `ipu7`.
    Those are ISYS capture endpoints, not webcams. The libcamera monitor remains
-   enabled and publishes the single usable camera to Firefox/WebRTC.
+   enabled and publishes the single usable camera. A user service configures
+   each Flathub Firefox profile to use its PipeWire camera backend, preventing
+   Firefox from bypassing WirePlumber and enumerating the raw V4L2 nodes.
 6. On Linux 7.2 or newer, the build instead requires
    `CONFIG_VIDEO_INTEL_CVS` and the in-tree `intel_cvs` module with the Dell
    `INTC10DE` alias, and does not build or install the external module.
@@ -184,12 +186,16 @@ readlink -f /sys/bus/i2c/devices/i2c-INTC10DE:00/driver
 readlink -f /sys/bus/i2c/devices/i2c-OVTI02C1:00/driver
 journalctl -k -b | grep -Ei 'ipu7|intel.cvs|ov02c10|firmware'
 cam -l
+rg 'media.webrtc.camera.allow-pipewire' \
+  ~/.var/app/org.mozilla.firefox/config/mozilla/firefox/*/user.js
 ```
 
 `cam -l` should report one OV02C10 camera. After restarting WirePlumber, its
 graph should contain no raw V4L2 devices described as `ipu7` and one libcamera
-camera source; Firefox should consequently show one internal camera instead of
-dozens of non-working IPU7 inputs.
+camera source. After Firefox has created a profile, log out and back in (or run
+`systemctl --user start purplefin-firefox-pipewire-camera.service`) and restart
+Firefox. Firefox should then show one internal camera instead of dozens of
+non-working IPU7 inputs.
 
 ## What Is Tracked
 

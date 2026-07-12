@@ -150,6 +150,19 @@ check:
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-activate
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-rebind-sensor
+    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/configure-firefox-pipewire-camera
+    test -f profile_files/dell-xps-9350-intel/system_files/usr/lib/systemd/user/purplefin-firefox-pipewire-camera.service
+    test -L profile_files/dell-xps-9350-intel/system_files/etc/systemd/user/default.target.wants/purplefin-firefox-pipewire-camera.service
+    test "$(readlink profile_files/dell-xps-9350-intel/system_files/etc/systemd/user/default.target.wants/purplefin-firefox-pipewire-camera.service)" = '../../../../usr/lib/systemd/user/purplefin-firefox-pipewire-camera.service'
+    firefox_test_root="${tmpdir}/firefox-profiles"
+    install -d "${firefox_test_root}/Profile With Spaces"
+    printf '%s\n' '[Profile0]' 'Path=Profile With Spaces' > "${firefox_test_root}/profiles.ini"
+    printf '%s\n' 'user_pref("example.preserved", true);' 'user_pref("media.webrtc.camera.allow-pipewire", false);' > "${firefox_test_root}/Profile With Spaces/user.js"
+    PURPLEFIN_FIREFOX_PROFILE_ROOT="${firefox_test_root}" profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/configure-firefox-pipewire-camera
+    PURPLEFIN_FIREFOX_PROFILE_ROOT="${firefox_test_root}" profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/configure-firefox-pipewire-camera
+    grep -qF 'user_pref("example.preserved", true);' "${firefox_test_root}/Profile With Spaces/user.js"
+    test "$(grep -cF 'user_pref("media.webrtc.camera.allow-pipewire", true);' "${firefox_test_root}/Profile With Spaces/user.js")" = 1
+    test "$(grep -cF '// Purplefin: expose the IPU7 libcamera source instead of raw V4L2 nodes.' "${firefox_test_root}/Profile With Spaces/user.js")" = 1
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/install-librepods
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/librepods/librepods
     test -f profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/librepods/librepods.sha256
