@@ -76,6 +76,8 @@ echo ":: Installing common Purplefin RPM overlays"
 dnf5 -y install ghostty
 dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
 base_packages=(
+	fuse
+	fuse-libs
 	nm-connection-editor
 	nm-connection-editor-desktop
 	wireguard-tools
@@ -89,6 +91,11 @@ for command in nm-connection-editor wg; do
 	command -v "${command}" >/dev/null
 done
 test -f /usr/share/applications/nm-connection-editor.desktop
+
+bash /tmp/purplefin-build/install-nextcloud-appimage.sh
+test -x /usr/bin/nextcloud
+test -f /usr/share/applications/com.nextcloud.desktopclient.nextcloud.desktop
+test -f /usr/share/purplefin/nextcloud-appimage.provenance
 
 bash /tmp/purplefin-build/install-bitwarden-cli-rpm.sh
 rpm -q purplefin-bitwarden-cli

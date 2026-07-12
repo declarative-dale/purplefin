@@ -95,10 +95,14 @@ Bluefin's kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
 their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
 base image also bakes Bitwarden's official native `bw` CLI inside a
 Purplefin-built RPM, Fedora's `wireguard-tools`, and a launchable NetworkManager
-connection editor for the preferred native WireGuard UI. Inherited Tailscale
-packages, services, repositories, setup hooks, and user-facing tips are removed
-from every profile. Terra's Bitwarden packages are excluded so future DNF
-operations continue to prefer the official-source Purplefin package.
+connection editor for the preferred native WireGuard UI. It also bakes the
+official Nextcloud desktop AppImage with a native application-menu launcher and
+preinstalls Gear Lever for installing, launching, updating, and organizing
+user-provided AppImages. Fedora's FUSE 2 runtime is retained explicitly for
+direct AppImage execution. Inherited Tailscale packages, services,
+repositories, setup hooks, and user-facing tips are removed from every profile.
+Terra's Bitwarden packages are excluded so future DNF operations continue to
+prefer the official-source Purplefin package.
 
 Bitwarden desktop is staged from Bitwarden's official native Linux RPM by a
 base first-boot rpm-ostree task and becomes available after the reboot into
@@ -200,6 +204,9 @@ dozens of non-working IPU7 inputs.
   that layers Bitwarden's official native desktop RPM.
 - Fedora `wireguard-tools` and the launchable NetworkManager connection editor
   as the native WireGuard CLI and GUI for every profile.
+- Nextcloud's checksum-pinned official AppImage, exposed as `/usr/bin/nextcloud`
+  with its desktop launcher, plus the Gear Lever Flatpak and Fedora FUSE 2
+  runtime for AppImage installation and application-menu integration.
 - Removal of inherited Tailscale packages, enabled services, and RPM repository
   configuration from every profile.
 - A first-boot, idempotent Homebrew bundle service.
