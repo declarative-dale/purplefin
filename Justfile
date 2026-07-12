@@ -33,12 +33,11 @@ check:
     test -f manifests/flatpaks.preinstall
     ! grep -qF 'com.bitwarden.desktop' manifests/flatpaks.preinstall
     grep -qF '[Flatpak Preinstall it.mijorus.gearlever]' manifests/flatpaks.preinstall
-    test -x build_files/install-nextcloud-appimage.sh
-    grep -qF 'nextcloud_version="33.0.7"' build_files/install-nextcloud-appimage.sh
-    grep -qF 'nextcloud_sha256="fd7549564c6b2bab5f984fa5d7df0d05c9b751017ac4b2bd9ccdf48981053074"' build_files/install-nextcloud-appimage.sh
-    grep -qF 'bash /tmp/purplefin-build/install-nextcloud-appimage.sh' build_files/build.sh
-    grep -qF 'test -x /usr/bin/nextcloud' build_files/build.sh
-    grep -qF 'test -f /usr/share/applications/com.nextcloud.desktopclient.nextcloud.desktop' build_files/build.sh
+    grep -qF '[Flatpak Preinstall com.nextcloud.desktopclient.nextcloud]' manifests/flatpaks.preinstall
+    grep -qF '[Flatpak Preinstall hu.irl.cameractrls]' manifests/flatpaks.preinstall
+    test ! -e build_files/install-nextcloud-appimage.sh
+    ! grep -qF 'install-nextcloud-appimage' build_files/build.sh
+    ! grep -qF '/usr/bin/nextcloud' build_files/build.sh
     for package in fuse fuse-libs; do
         grep -qE "^[[:space:]]*${package}$" build_files/build.sh
     done

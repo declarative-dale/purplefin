@@ -92,11 +92,6 @@ for command in nm-connection-editor wg; do
 done
 test -f /usr/share/applications/nm-connection-editor.desktop
 
-bash /tmp/purplefin-build/install-nextcloud-appimage.sh
-test -x /usr/bin/nextcloud
-test -f /usr/share/applications/com.nextcloud.desktopclient.nextcloud.desktop
-test -f /usr/share/purplefin/nextcloud-appimage.provenance
-
 bash /tmp/purplefin-build/install-bitwarden-cli-rpm.sh
 rpm -q purplefin-bitwarden-cli
 test "$(rpm -qf --qf '%{NAME}\n' /usr/bin/bw)" = "purplefin-bitwarden-cli"

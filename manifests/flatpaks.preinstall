@@ -18,11 +18,19 @@ IsRuntime=false
 Branch=stable
 IsRuntime=false
 
+[Flatpak Preinstall com.nextcloud.desktopclient.nextcloud]
+Branch=stable
+IsRuntime=false
+
 [Flatpak Preinstall com.ranfdev.DistroShelf]
 Branch=stable
 IsRuntime=false
 
 [Flatpak Preinstall com.spotify.Client]
+Branch=stable
+IsRuntime=false
+
+[Flatpak Preinstall hu.irl.cameractrls]
 Branch=stable
 IsRuntime=false
 

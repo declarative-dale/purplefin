@@ -95,10 +95,10 @@ Bluefin's kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
 their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
 base image also bakes Bitwarden's official native `bw` CLI inside a
 Purplefin-built RPM, Fedora's `wireguard-tools`, and a launchable NetworkManager
-connection editor for the preferred native WireGuard UI. It also bakes the
-official Nextcloud desktop AppImage with a native application-menu launcher and
-preinstalls Gear Lever for installing, launching, updating, and organizing
-user-provided AppImages. Fedora's FUSE 2 runtime is retained explicitly for
+connection editor for the preferred native WireGuard UI. Every profile
+preinstalls the Nextcloud desktop client and Cameractrls from Flathub. Gear
+Lever remains preinstalled for installing, launching, updating, and organizing
+user-provided AppImages, and Fedora's FUSE 2 runtime remains available for
 direct AppImage execution. Inherited Tailscale packages, services,
 repositories, setup hooks, and user-facing tips are removed from every profile.
 Terra's Bitwarden packages are excluded so future DNF operations continue to
@@ -114,6 +114,30 @@ staged deployment. Both Dell profiles also install Librepods at
 `/usr/bin/librepods` from the `librepods` artifact produced by the latest
 successful upstream Linux Rust workflow run recorded in
 `/usr/share/purplefin/librepods.provenance`.
+
+### Migrating from the Nextcloud AppImage
+
+Purplefin images built before this change contain a Nextcloud AppImage in the
+immutable `/usr` deployment. Deploy the updated image and reboot to remove the
+AppImage, its `/usr/bin/nextcloud` link, desktop file, icon, and provenance file.
+The shared Flatpak preinstall service installs the replacement automatically.
+If it has not run yet, install the replacement explicitly:
+
+```bash
+flatpak install --system flathub com.nextcloud.desktopclient.nextcloud
+```
+
+Before rebooting, quit the old client with `pkill -x nextcloud` if it is still
+running. After rebooting, verify the migration with:
+
+```bash
+test ! -e /usr/libexec/purplefin/appimages/Nextcloud.AppImage
+test ! -e /usr/share/purplefin/nextcloud-appimage.provenance
+flatpak info com.nextcloud.desktopclient.nextcloud
+```
+
+Nextcloud's Flatpak keeps application state in its sandbox, so launch it and
+configure the account again if the existing AppImage settings are not imported.
 
 ## Dell IPU7 Camera Flow
 
@@ -210,9 +234,9 @@ non-working IPU7 inputs.
   that layers Bitwarden's official native desktop RPM.
 - Fedora `wireguard-tools` and the launchable NetworkManager connection editor
   as the native WireGuard CLI and GUI for every profile.
-- Nextcloud's checksum-pinned official AppImage, exposed as `/usr/bin/nextcloud`
-  with its desktop launcher, plus the Gear Lever Flatpak and Fedora FUSE 2
-  runtime for AppImage installation and application-menu integration.
+- Nextcloud Desktop Client and Cameractrls as base Flatpaks inherited by every
+  profile, plus Gear Lever and Fedora's FUSE 2 runtime for user-managed
+  AppImages and application-menu integration.
 - Removal of inherited Tailscale packages, enabled services, and RPM repository
   configuration from every profile.
 - A first-boot, idempotent Homebrew bundle service.
