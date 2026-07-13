@@ -114,10 +114,7 @@ A daily GitHub workflow checks for a new CLI release and opens a pull request;
 merging that update builds the version into the next Purplefin deployment.
 Both Dell profiles bake in `1password-cli`; the 1Password desktop RPM is
 layered by a first-boot rpm-ostree task and becomes available after the reboot
-into that staged deployment. Both Dell profiles also install Librepods at
-`/usr/bin/librepods` from the `librepods` artifact produced by the latest
-successful upstream Linux Rust workflow run recorded in
-`/usr/share/purplefin/librepods.provenance`.
+into that staged deployment.
 
 To request immediate update checks instead of waiting for the timers and
 scheduled workflow, use:
@@ -317,7 +314,6 @@ non-working IPU7 inputs.
 - Vates planet boot, Plymouth, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
-- Dell XPS 9350 Intel Librepods binary from upstream GitHub Actions run `25080113527` (`linux/rust`, artifact `librepods`) installed only in Dell profiles.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.

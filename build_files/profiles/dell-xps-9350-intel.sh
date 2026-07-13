@@ -9,7 +9,6 @@ chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-la
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-activate
 chmod 0755 /usr/libexec/purplefin/dell-ipu7-rebind-sensor
 chmod 0755 /usr/libexec/purplefin/configure-firefox-pipewire-camera
-chmod 0755 /usr/libexec/purplefin/install-librepods
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 # shellcheck source=/usr/libexec/purplefin/lib/dell-ipu7.sh
@@ -478,9 +477,6 @@ install_ipu7_kernel
 
 echo ":: Enabling Dell IPU7 CVS activation and OV02C10 reprobe"
 systemctl enable purplefin-dell-ipu7-camera.service
-
-echo ":: Installing Librepods from pinned GitHub Actions artifact"
-/usr/libexec/purplefin/install-librepods
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service

@@ -238,21 +238,14 @@ echo ":: Applying Dell XPS 9350 Intel no-camera test overlay"
 copy_profile_file "etc/yum.repos.d/1password.repo"
 copy_profile_file "usr/lib/sysusers.d/purplefin-onepassword-cli.conf"
 copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer"
-copy_profile_file "usr/libexec/purplefin/install-librepods"
 copy_profile_file "usr/libexec/purplefin/install-refind-theme"
 copy_profile_file "usr/lib/systemd/system/purplefin-refind-theme.service"
-copy_profile_tree "usr/libexec/purplefin/librepods"
 copy_profile_tree "usr/share/purplefin/refind"
-copy_profile_file "usr/share/purplefin/librepods.provenance"
 
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
-chmod 0755 /usr/libexec/purplefin/install-librepods
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 install_mainline_7_1_kernel
-
-echo ":: Installing Librepods from pinned GitHub Actions artifact"
-/usr/libexec/purplefin/install-librepods
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service
