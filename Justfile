@@ -75,11 +75,11 @@ check:
     grep -qF 'rpm -q purplefin-bitwarden-cli' build_files/build.sh
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
     grep -qF '### Migrating Bitwarden from the layered RPM' README.md
-    for package in nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
+    for package in micro nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
         grep -qE "^[[:space:]]*${package}$" build_files/build.sh
     done
     grep -qF 'dnf5 -y install "${base_packages[@]}"' build_files/build.sh
-    grep -qF 'for command in nm-connection-editor wg' build_files/build.sh
+    grep -qF 'for command in micro nm-connection-editor wg' build_files/build.sh
     grep -qF 'test -f /usr/share/applications/nm-connection-editor.desktop' build_files/build.sh
     grep -qF 'systemctl disable tailscaled.service' build_files/build.sh
     grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/build.sh

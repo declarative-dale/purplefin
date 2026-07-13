@@ -79,6 +79,7 @@ dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
 base_packages=(
 	fuse
 	fuse-libs
+	micro
 	nm-connection-editor
 	nm-connection-editor-desktop
 	wireguard-tools
@@ -88,7 +89,7 @@ dnf5 -y install "${base_packages[@]}"
 for package in "${base_packages[@]}"; do
 	rpm -q "${package}"
 done
-for command in nm-connection-editor wg; do
+for command in micro nm-connection-editor wg; do
 	command -v "${command}" >/dev/null
 done
 test -f /usr/share/applications/nm-connection-editor.desktop

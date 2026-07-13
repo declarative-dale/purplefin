@@ -94,12 +94,13 @@ Dell no-camera test profile. The full Dell camera profile uses the pinned
 Bluefin's kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
 their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
 base image also bakes Bitwarden's official native `bw` CLI inside a
-Purplefin-built RPM, Fedora's `wireguard-tools`, and a launchable NetworkManager
-connection editor for the preferred native WireGuard UI. Every profile
-preinstalls the Nextcloud desktop client and Cameractrls from Flathub. Gear
-Lever remains preinstalled for installing, launching, updating, and organizing
-user-provided AppImages, and Fedora's FUSE 2 runtime remains available for
-direct AppImage execution. Inherited Tailscale packages, services,
+Purplefin-built RPM, Fedora's `micro` terminal editor and `wireguard-tools`, and
+a launchable NetworkManager connection editor for the preferred native
+WireGuard UI. Every profile preinstalls the Nextcloud desktop client and
+Cameractrls from Flathub. Gear Lever remains preinstalled for installing,
+launching, updating, and organizing user-provided AppImages, and Fedora's FUSE
+2 runtime remains available for direct AppImage execution. Inherited Tailscale
+packages, services,
 repositories, setup hooks, and user-facing tips are removed from every profile.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
 reintroduce the desktop RPM after migration to Flatpak.
@@ -305,6 +306,7 @@ non-working IPU7 inputs.
   layer after the verified Flatpak replacement is deployed.
 - Fedora `wireguard-tools` and the launchable NetworkManager connection editor
   as the native WireGuard CLI and GUI for every profile.
+- Fedora's `micro` RPM as the terminal text editor available in every profile.
 - The Terra Espanso Wayland RPM with its temporary input-device capability and
   an image-shipped systemd user service enabled for desktop users.
 - Nextcloud Desktop Client and Cameractrls as base Flatpaks inherited by every
