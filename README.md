@@ -305,6 +305,8 @@ non-working IPU7 inputs.
   layer after the verified Flatpak replacement is deployed.
 - Fedora `wireguard-tools` and the launchable NetworkManager connection editor
   as the native WireGuard CLI and GUI for every profile.
+- The Terra Espanso Wayland RPM with its temporary input-device capability and
+  an image-shipped systemd user service enabled for desktop users.
 - Nextcloud Desktop Client and Cameractrls as base Flatpaks inherited by every
   profile, plus Gear Lever and Fedora's FUSE 2 runtime for user-managed
   AppImages and application-menu integration.

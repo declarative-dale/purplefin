@@ -88,6 +88,13 @@ check:
     grep -qF 'rm -f /usr/share/fish/completions/tailscale.fish' build_files/build.sh
     grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/build.sh
     grep -qF "sed -i '/^Tailscale is included,/d'" build_files/build.sh
+    grep -qF 'install espanso-wayland' build_files/build.sh
+    grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' build_files/build.sh
+    test -f system_files/usr/lib/systemd/user/espanso.service
+    grep -qxF 'ExecStart=/usr/bin/espanso launcher' system_files/usr/lib/systemd/user/espanso.service
+    grep -qxF 'WantedBy=default.target' system_files/usr/lib/systemd/user/espanso.service
+    test -L system_files/etc/systemd/user/default.target.wants/espanso.service
+    test "$(readlink system_files/etc/systemd/user/default.target.wants/espanso.service)" = '../../../../usr/lib/systemd/user/espanso.service'
     test -f system_files/etc/skel/.config/ghostty/config.ghostty
     test -f system_files/usr/share/purplefin/ghostty/config.ghostty
     cmp -s system_files/etc/skel/.config/ghostty/config.ghostty system_files/usr/share/purplefin/ghostty/config.ghostty
