@@ -101,19 +101,91 @@ Lever remains preinstalled for installing, launching, updating, and organizing
 user-provided AppImages, and Fedora's FUSE 2 runtime remains available for
 direct AppImage execution. Inherited Tailscale packages, services,
 repositories, setup hooks, and user-facing tips are removed from every profile.
-Terra's Bitwarden packages are excluded so future DNF operations continue to
-prefer the official-source Purplefin package.
+Terra's Bitwarden packages are excluded so future DNF operations cannot
+reintroduce the desktop RPM after migration to Flatpak.
 
-Bitwarden desktop is staged from Bitwarden's official native Linux RPM by a
-base first-boot rpm-ostree task and becomes available after the reboot into
-that staged deployment. Direct image installation is not used because the RPM
-writes to `/opt`, which is persistent `/var` territory in bootc images. Both
-Dell profiles bake in `1password-cli`; the 1Password desktop RPM is layered by
-a first-boot rpm-ostree task and becomes available after the reboot into that
-staged deployment. Both Dell profiles also install Librepods at
+Bitwarden desktop is installed system-wide from Bitwarden's verified Flathub
+package. A Purplefin timer checks it for updates twice daily, independently of
+the bootc image lifecycle, and the image includes Bitwarden's polkit policy for
+Linux system-authentication unlock. The native `/usr/bin/bw` CLI remains a
+Purplefin-built RPM in the bootc image: its official versioned archive and
+GitHub-published SHA-256 digest are pinned in `build_files/bitwarden-cli.env`.
+A daily GitHub workflow checks for a new CLI release and opens a pull request;
+merging that update builds the version into the next Purplefin deployment.
+Both Dell profiles bake in `1password-cli`; the 1Password desktop RPM is
+layered by a first-boot rpm-ostree task and becomes available after the reboot
+into that staged deployment. Both Dell profiles also install Librepods at
 `/usr/bin/librepods` from the `librepods` artifact produced by the latest
 successful upstream Linux Rust workflow run recorded in
 `/usr/share/purplefin/librepods.provenance`.
+
+To request immediate update checks instead of waiting for the timers and
+scheduled workflow, use:
+
+```bash
+sudo systemctl start purplefin-bitwarden-flatpak-update.service
+bw update
+sudo bootc upgrade
+```
+
+`bw update` reports whether the image-baked CLI is behind upstream; it does not
+replace the binary. A merged automated CLI update and a subsequent bootc image
+upgrade perform that replacement atomically.
+
+### Migrating Bitwarden from the layered RPM
+
+Purplefin images built before this change layer Bitwarden's desktop RPM on the
+host during first boot. The replacement image preinstalls the verified Flatpak
+and carries a one-time migration task that removes the old RPM layer without
+deleting its per-user data.
+
+Before upgrading, make sure the vault has completed a sync. Then deploy and
+boot the updated image:
+
+```bash
+sudo bootc upgrade
+sudo systemctl reboot
+```
+
+On the first boot into the updated image,
+`purplefin-firstboot-rpm-ostree.service` detects the legacy `bitwarden` layer
+and stages its removal. If a removal was staged, reboot once more:
+
+```bash
+systemctl status purplefin-firstboot-rpm-ostree.service
+sudo systemctl reboot
+```
+
+The Flatpak uses `~/.var/app/com.bitwarden.desktop/` rather than the native
+client's `~/.config/Bitwarden/` state. Launch the Flatpak and sign in again;
+keep the old directory until the new client has synced and all expected vault
+items are present. The native CLI keeps its existing configuration and remains
+available as `/usr/bin/bw`.
+
+Verify the completed migration with:
+
+```bash
+! rpm -q bitwarden
+flatpak info --system com.bitwarden.desktop
+rpm -q purplefin-bitwarden-cli
+bw --version
+systemctl status purplefin-bitwarden-flatpak-update.timer
+test -f /usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy
+```
+
+If the one-time task did not remove the old layer, remove it explicitly and
+reboot before launching the Flatpak:
+
+```bash
+sudo rpm-ostree uninstall bitwarden
+sudo systemctl reboot
+flatpak install --system flathub com.bitwarden.desktop
+```
+
+After migration, enable **Unlock with system authentication** in Bitwarden if
+desired. A rollback to a pre-migration bootc deployment may temporarily expose
+both desktop packages because Flatpak state persists outside the bootc image;
+use the Flatpak, then upgrade forward again.
 
 ### Migrating from the Nextcloud AppImage
 
@@ -225,13 +297,15 @@ non-working IPU7 inputs.
 
 - Base image selection and build profile logic.
 - A centralized first-boot rpm-ostree runner with ordered task scripts and `/var/lib/purplefin/firstboot/*.done` markers. It stops after a task stages a deployment so later rpm-ostree tasks run after the next reboot instead of replacing earlier queued changes.
-- System Flatpak preinstall manifest generated from this laptop. Bitwarden is
-  intentionally excluded from this manifest and installed natively instead.
+- System Flatpak preinstall manifest generated from this laptop, including the
+  verified Bitwarden desktop package and its twice-daily update timer.
 - Homebrew `Brewfile` generated from this laptop.
 - Image-baked Packer, Ansible, OpenTofu, and OpenBao tooling for every profile.
 - Bitwarden's official native CLI payload under `/usr/bin/bw`, wrapped without
-  modification in a Purplefin-built RPM, plus a base first-boot rpm-ostree task
-  that layers Bitwarden's official native desktop RPM.
+  modification in a Purplefin-built RPM from a pinned versioned archive and
+  SHA-256 digest, plus a daily workflow that proposes CLI release updates.
+- A one-time first-boot migration that removes the legacy Bitwarden desktop RPM
+  layer after the verified Flatpak replacement is deployed.
 - Fedora `wireguard-tools` and the launchable NetworkManager connection editor
   as the native WireGuard CLI and GUI for every profile.
 - Nextcloud Desktop Client and Cameractrls as base Flatpaks inherited by every

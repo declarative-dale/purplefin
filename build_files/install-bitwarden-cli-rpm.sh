@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cli_url="${PURPLEFIN_BITWARDEN_CLI_URL:-https://vault.bitwarden.com/download/?app=cli&platform=linux}"
+metadata_file="${PURPLEFIN_BITWARDEN_CLI_METADATA:-/tmp/purplefin-build/bitwarden-cli.env}"
 spec_file="${PURPLEFIN_BITWARDEN_CLI_SPEC:-/tmp/purplefin-build/bitwarden-cli.spec}"
 workdir="$(mktemp -d)"
 rpm_build_packages=()
@@ -15,6 +15,25 @@ trap cleanup EXIT
 	echo "The official Bitwarden CLI RPM wrapper currently supports x86_64 only" >&2
 	exit 1
 }
+[[ -f "${metadata_file}" ]] || {
+	echo "Missing Bitwarden CLI release metadata: ${metadata_file}" >&2
+	exit 1
+}
+# shellcheck source=bitwarden-cli.env
+source "${metadata_file}"
+
+cli_version="${PURPLEFIN_BITWARDEN_CLI_VERSION:-${BITWARDEN_CLI_VERSION:-}}"
+archive_sha256="${PURPLEFIN_BITWARDEN_CLI_SHA256:-${BITWARDEN_CLI_SHA256:-}}"
+if [[ ! "${cli_version}" =~ ^[0-9]+([.][0-9]+)+$ ]]; then
+	echo "Invalid pinned Bitwarden CLI version: ${cli_version}" >&2
+	exit 1
+fi
+if [[ ! "${archive_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+	echo "Invalid pinned Bitwarden CLI SHA-256: ${archive_sha256}" >&2
+	exit 1
+fi
+cli_url="${PURPLEFIN_BITWARDEN_CLI_URL:-https://github.com/bitwarden/clients/releases/download/cli-v${cli_version}/bw-linux-${cli_version}.zip}"
+
 for command in curl sha256sum unzip; do
 	command -v "${command}" >/dev/null 2>&1 || {
 		echo "${command} is required to build the official Bitwarden CLI RPM" >&2
@@ -41,19 +60,20 @@ cli_home="${workdir}/home"
 
 echo ":: Building native RPM from Bitwarden's official CLI"
 curl --fail --location --show-error --silent --retry 3 --retry-delay 2 --output "${cli_zip}" "${cli_url}"
+printf '%s  %s\n' "${archive_sha256}" "${cli_zip}" | sha256sum --check --strict
 unzip -p "${cli_zip}" bw >"${cli_binary}"
 chmod 0755 "${cli_binary}"
 install -d "${cli_home}/.config"
 
-cli_version="$(HOME="${cli_home}" XDG_CONFIG_HOME="${cli_home}/.config" "${cli_binary}" --version)"
-cli_version="${cli_version#v}"
-if [[ ! "${cli_version}" =~ ^[0-9]+([.][0-9]+)+$ ]]; then
-	echo "Unexpected Bitwarden CLI version: ${cli_version}" >&2
+actual_cli_version="$(HOME="${cli_home}" XDG_CONFIG_HOME="${cli_home}/.config" "${cli_binary}" --version)"
+actual_cli_version="${actual_cli_version#v}"
+if [[ "${actual_cli_version}" != "${cli_version}" ]]; then
+	echo "Bitwarden CLI archive contains version ${actual_cli_version}; expected ${cli_version}" >&2
 	exit 1
 fi
-cli_sha256="$(sha256sum "${cli_binary}" | awk '{print $1}')"
-printf 'source_url=%s\nversion=%s\nsha256=%s\n' \
-	"${cli_url}" "${cli_version}" "${cli_sha256}" >"${provenance}"
+binary_sha256="$(sha256sum "${cli_binary}" | awk '{print $1}')"
+printf 'source_url=%s\nversion=%s\narchive_sha256=%s\nbinary_sha256=%s\n' \
+	"${cli_url}" "${cli_version}" "${archive_sha256}" "${binary_sha256}" >"${provenance}"
 
 install -d "${workdir}/rpmbuild/BUILD" "${workdir}/rpmbuild/BUILDROOT" \
 	"${workdir}/rpmbuild/RPMS" "${workdir}/rpmbuild/SOURCES" "${workdir}/rpmbuild/SPECS" \
@@ -83,5 +103,5 @@ fi
 
 rpm -q purplefin-bitwarden-cli
 test "$(rpm -qf --qf '%{NAME}\n' /usr/bin/bw)" = "purplefin-bitwarden-cli"
-test "$(sha256sum /usr/bin/bw | awk '{print $1}')" = "${cli_sha256}"
+test "$(sha256sum /usr/bin/bw | awk '{print $1}')" = "${binary_sha256}"
 test "$(HOME="${cli_home}" XDG_CONFIG_HOME="${cli_home}/.config" bw --version)" = "${cli_version}"

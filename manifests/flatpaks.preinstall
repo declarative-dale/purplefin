@@ -6,6 +6,10 @@ IsRuntime=false
 Branch=stable
 IsRuntime=false
 
+[Flatpak Preinstall com.bitwarden.desktop]
+Branch=stable
+IsRuntime=false
+
 [Flatpak Preinstall com.github.PintaProject.Pinta]
 Branch=stable
 IsRuntime=false

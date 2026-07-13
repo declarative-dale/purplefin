@@ -22,6 +22,7 @@ printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
 chmod 0755 /usr/libexec/purplefin/install-ghostty-defaults
 chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
+chmod 0755 /usr/libexec/purplefin/update-bitwarden-flatpak
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
 	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
 fi
@@ -121,6 +122,7 @@ echo ":: Enabling common Purplefin services"
 systemctl enable flatpak-nuke-fedora.service
 systemctl enable flatpak-preinstall.service
 systemctl enable purplefin-brew-bundle.service
+systemctl enable purplefin-bitwarden-flatpak-update.timer
 
 echo ":: Applying Purplefin build profile: ${profile}"
 "${profile_script}"

@@ -26,12 +26,12 @@ check:
     printf '%s\n' '[Unit]' 'Description=udev settle stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-udev-settle.service"
     printf '%s\n' '[Unit]' 'Description=module loader stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-modules-load.service"
     printf '%s\n' '[Unit]' 'Description=display manager stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/display-manager.service"
-    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-camera.service
+    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.timer /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-camera.service
     udevadm verify --root="${tmpdir}" /usr/lib/udev/rules.d/99-purplefin-dell-ipu7-camera.rules
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
-    ! grep -qF 'com.bitwarden.desktop' manifests/flatpaks.preinstall
+    grep -qF '[Flatpak Preinstall com.bitwarden.desktop]' manifests/flatpaks.preinstall
     grep -qF '[Flatpak Preinstall it.mijorus.gearlever]' manifests/flatpaks.preinstall
     grep -qF '[Flatpak Preinstall com.nextcloud.desktopclient.nextcloud]' manifests/flatpaks.preinstall
     grep -qF '[Flatpak Preinstall hu.irl.cameractrls]' manifests/flatpaks.preinstall
@@ -42,20 +42,39 @@ check:
         grep -qE "^[[:space:]]*${package}$" build_files/build.sh
     done
     test ! -e system_files/usr/libexec/purplefin/install-bitwarden-cli-native
-    test -x system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF 'app=desktop&platform=linux&variant=rpm' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF 'rpm -q bitwarden' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF "rpm -qp --qf '%{NAME}\\n'" system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
-    grep -qF 'run_rpm_ostree install --idempotent "${desktop_rpm}"' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
+    test -x system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-flatpak-migration
+    grep -qF 'rpm -q bitwarden' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-flatpak-migration
+    grep -qF 'run_rpm_ostree uninstall bitwarden' system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-flatpak-migration
+    test -x system_files/usr/libexec/purplefin/update-bitwarden-flatpak
+    grep -qF 'flatpak update --system --assumeyes --noninteractive "${app_id}"' system_files/usr/libexec/purplefin/update-bitwarden-flatpak
+    test -f system_files/usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.service
+    test -f system_files/usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.timer
+    grep -qF 'OnCalendar=*-*-* 06,18:00:00' system_files/usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.timer
+    grep -qF 'systemctl enable purplefin-bitwarden-flatpak-update.timer' build_files/build.sh
+    test -f system_files/usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy
+    grep -qF '<action id="com.bitwarden.Bitwarden.unlock">' system_files/usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy
     test -x build_files/install-bitwarden-cli-rpm.sh
+    test -x build_files/update-bitwarden-cli.sh
     test -f build_files/bitwarden-cli.spec
-    grep -qF 'https://vault.bitwarden.com/download/?app=cli&platform=linux' build_files/install-bitwarden-cli-rpm.sh
+    test -f build_files/bitwarden-cli.env
+    grep -qE '^BITWARDEN_CLI_VERSION=[0-9]+(\.[0-9]+)+$' build_files/bitwarden-cli.env
+    grep -qE '^BITWARDEN_CLI_SHA256=[0-9a-f]{64}$' build_files/bitwarden-cli.env
+    grep -qF 'github.com/bitwarden/clients/releases/download/cli-v${cli_version}/bw-linux-${cli_version}.zip' build_files/install-bitwarden-cli-rpm.sh
+    grep -qF 'sha256sum --check --strict' build_files/install-bitwarden-cli-rpm.sh
+    ! grep -qF 'https://vault.bitwarden.com/download/?app=cli&platform=linux' build_files/install-bitwarden-cli-rpm.sh
     grep -qF 'rpmbuild -bb' build_files/install-bitwarden-cli-rpm.sh
+    grep -qF 'api.github.com/repos/bitwarden/clients/releases?per_page=100' build_files/update-bitwarden-cli.sh
+    grep -qF 'sha256sum --check --strict' build_files/update-bitwarden-cli.sh
+    test -f .github/workflows/update-bitwarden-cli.yml
+    grep -qF 'cron: "23 8 * * *"' .github/workflows/update-bitwarden-cli.yml
+    grep -qF 'build_files/update-bitwarden-cli.sh' .github/workflows/update-bitwarden-cli.yml
     grep -qF 'Name:           purplefin-bitwarden-cli' build_files/bitwarden-cli.spec
     grep -qF '%global __os_install_post %{nil}' build_files/bitwarden-cli.spec
     grep -qF 'bash /tmp/purplefin-build/install-bitwarden-cli-rpm.sh' build_files/build.sh
     grep -qF 'rpm -q purplefin-bitwarden-cli' build_files/build.sh
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
+    grep -qF '### Migrating Bitwarden from the layered RPM' README.md
     for package in nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
         grep -qE "^[[:space:]]*${package}$" build_files/build.sh
     done
