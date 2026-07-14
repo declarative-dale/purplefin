@@ -5,6 +5,10 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 kernel_repo_id="purplefin-dell-mainline-kernel"
 kernel_repo_file="/etc/yum.repos.d/${kernel_repo_id}.repo"
 kernel_default_evr="7.1.2-355.vanilla.fc44"
+
+# shellcheck source=/tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
+source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
+
 kernel_runtime_packages=(
 	kernel
 	kernel-core
@@ -241,11 +245,23 @@ copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-des
 copy_profile_file "usr/libexec/purplefin/install-refind-theme"
 copy_profile_file "usr/lib/systemd/system/purplefin-refind-theme.service"
 copy_profile_tree "usr/share/purplefin/refind"
+copy_profile_file "usr/lib/purplefin/dell-xps-9350-battery.conf"
+copy_profile_file "usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb"
+copy_profile_file "usr/lib/tuned/profiles/purplefin-dell-xps-9350-performance/tuned.conf"
+copy_profile_file "usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service"
+copy_profile_file "usr/libexec/purplefin/configure-dell-xps-9350-battery"
+copy_profile_file "usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service"
+copy_profile_file "usr/libexec/purplefin/dell-xps-9350-panel-policy"
+copy_profile_file "usr/share/purplefin/dell-xps-9350-panel.conf"
+copy_profile_file "usr/share/glib-2.0/schemas/zz9-purplefin-dell-xps-9350.gschema.override"
+copy_profile_file "etc/systemd/user/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service"
 
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 install_mainline_7_1_kernel
+
+purplefin_configure_dell_xps_9350_common
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service

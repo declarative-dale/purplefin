@@ -3,6 +3,9 @@ set -euo pipefail
 
 profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 
+# shellcheck source=/tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
+source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
+
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
 chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
@@ -477,6 +480,8 @@ install_ipu7_kernel
 
 echo ":: Enabling Dell IPU7 CVS activation and OV02C10 reprobe"
 systemctl enable purplefin-dell-ipu7-camera.service
+
+purplefin_configure_dell_xps_9350_common
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service

@@ -26,8 +26,21 @@ check:
     printf '%s\n' '[Unit]' 'Description=udev settle stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-udev-settle.service"
     printf '%s\n' '[Unit]' 'Description=module loader stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/systemd-modules-load.service"
     printf '%s\n' '[Unit]' 'Description=display manager stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/display-manager.service"
-    systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.timer /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-camera.service
-    udevadm verify --root="${tmpdir}" /usr/lib/udev/rules.d/99-purplefin-dell-ipu7-camera.rules
+    printf '%s\n' '[Unit]' 'Description=UPower stub' '[Service]' 'Type=oneshot' 'ExecStart=/usr/bin/true' > "${tmpdir}/usr/lib/systemd/system/upower.service"
+    printf '%s\n' '[Unit]' 'Description=Graphical session preparation' > "${tmpdir}/usr/lib/systemd/system/graphical-session-pre.target"
+    printf '%s\n' '[Unit]' 'Description=Graphical session' > "${tmpdir}/usr/lib/systemd/system/graphical-session.target"
+    cp "${tmpdir}/usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service" "${tmpdir}/usr/lib/systemd/system/"
+    install -d "${tmpdir}/usr/lib/systemd/system/graphical-session.target.wants"
+    ln -s ../purplefin-dell-xps-9350-panel.service "${tmpdir}/usr/lib/systemd/system/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service"
+    systemd_verify_log="${tmpdir}/systemd-verify.log"
+    if ! env -u XDG_RUNTIME_DIR SYSTEMD_BYPASS_USERDB=1 systemd-analyze verify --root="${tmpdir}" /usr/lib/systemd/system/purplefin-firstboot-rpm-ostree.service /usr/lib/systemd/system/purplefin-brew-bundle.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.service /usr/lib/systemd/system/purplefin-bitwarden-flatpak-update.timer /usr/lib/systemd/system/purplefin-refind-theme.service /usr/lib/systemd/system/purplefin-dell-ipu7-camera.service /usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service /usr/lib/systemd/system/graphical-session.target /usr/lib/systemd/system/purplefin-dell-xps-9350-panel.service 2>"${systemd_verify_log}"; then
+        grep -qF 'Failed to turn off SO_PASSRIGHTS on user lookup socket' "${systemd_verify_log}"
+        grep -qF 'Failed to enable SO_PASSCRED on handoff timestamp socket' "${systemd_verify_log}"
+        unexpected_systemd_error="$(grep -Ev '^(Failed to turn off SO_PASSRIGHTS on user lookup socket, ignoring: Operation not permitted|Failed to enable SO_PASSCRED on handoff timestamp socket: Operation not permitted)$' "${systemd_verify_log}" || true)"
+        test -z "${unexpected_systemd_error}"
+        echo 'systemd-analyze verify skipped: sandbox blocks its userdb socket setup' >&2
+    fi
+    env -u XDG_RUNTIME_DIR udevadm verify --root="${tmpdir}" /usr/lib/udev/rules.d/99-purplefin-dell-ipu7-camera.rules
 
     test -f manifests/Brewfile
     test -f manifests/flatpaks.preinstall
@@ -163,6 +176,24 @@ check:
     grep -qF 'kernel_default_evr="7.1.2-355.vanilla.fc44"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'remove_inherited_v4l2loopback_kmods' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'kmod-zfs' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    test -f build_files/profiles/lib/dell-xps-9350-common.sh
+    for profile_script in build_files/profiles/dell-xps-9350-intel.sh build_files/profiles/dell-xps-9350-intel-no-ipu7.sh; do
+        grep -qF 'source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh' "${profile_script}"
+        grep -qF 'purplefin_configure_dell_xps_9350_common' "${profile_script}"
+    done
+    for common_path in \
+        usr/lib/purplefin/dell-xps-9350-battery.conf \
+        usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb \
+        usr/lib/tuned/profiles/purplefin-dell-xps-9350-performance/tuned.conf \
+        usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service \
+        usr/libexec/purplefin/configure-dell-xps-9350-battery \
+        usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service \
+        usr/libexec/purplefin/dell-xps-9350-panel-policy \
+        usr/share/purplefin/dell-xps-9350-panel.conf \
+        usr/share/glib-2.0/schemas/zz9-purplefin-dell-xps-9350.gschema.override \
+        etc/systemd/user/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service; do
+        grep -qF "copy_profile_file \"${common_path}\"" build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    done
     ! grep -Eq 'copy_profile_(file|tree) ".*(dell-ipu7|ipu7-|v4l2loopback|libcamera|pipewire|intel_cvs|intel_ipu7)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     ! grep -Eq '20-dell-ipu7|30-dell-ipu7|40-dell-ipu7|dell-ipu7-setup|dell-ipu7-patch|usr/libexec/purplefin/lib/dell-ipu7|purplefin-dell-ipu7-(psys|v4l2loopback)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     test ! -e system_files/etc/yum.repos.d/1password.repo
@@ -171,6 +202,59 @@ check:
     test ! -e profile_files/dell-xps-9350-intel/system_files/etc/plymouth
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
+    xps_profile_root=profile_files/dell-xps-9350-intel/system_files
+    battery_helper="${xps_profile_root}/usr/libexec/purplefin/configure-dell-xps-9350-battery"
+    battery_unit="${xps_profile_root}/usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service"
+    battery_hwdb="${xps_profile_root}/usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb"
+    tuned_profile="${xps_profile_root}/usr/lib/tuned/profiles/purplefin-dell-xps-9350-performance/tuned.conf"
+    panel_helper="${xps_profile_root}/usr/libexec/purplefin/dell-xps-9350-panel-policy"
+    panel_unit="${xps_profile_root}/usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service"
+    panel_defaults="${xps_profile_root}/usr/share/purplefin/dell-xps-9350-panel.conf"
+    panel_wants="${xps_profile_root}/etc/systemd/user/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service"
+    ambient_override="${xps_profile_root}/usr/share/glib-2.0/schemas/zz9-purplefin-dell-xps-9350.gschema.override"
+    test -x "${battery_helper}"
+    test -f "${battery_unit}"
+    test -f "${battery_hwdb}"
+    grep -qF 'XPS 13 9350' "${battery_helper}"
+    grep -qF 'EnableChargeThreshold b true' "${battery_helper}"
+    grep -qF 'ChargeThresholdEnabled' "${battery_helper}"
+    grep -qF 'write_attribute "${charge_types_path}" Custom' "${battery_helper}"
+    grep -qx 'Requires=upower.service' "${battery_unit}"
+    grep -qx 'START_THRESHOLD=75' "${xps_profile_root}/usr/lib/purplefin/dell-xps-9350-battery.conf"
+    grep -qx 'END_THRESHOLD=80' "${xps_profile_root}/usr/lib/purplefin/dell-xps-9350-battery.conf"
+    systemd-hwdb --root="${tmpdir}" --strict update
+    systemd-hwdb --root="${tmpdir}" query 'battery:BAT0:DELL TR7FC488:dmi:bvnDellInc.:svnDellInc.:pnXPS139350:' | grep -qx 'CHARGE_LIMIT=75,80'
+    for expected_setting in include=balanced energy_performance_preference=performance boost=1 platform_profile=performance; do
+        grep -qxF "${expected_setting}" "${tuned_profile}"
+    done
+    ! grep -Eq '^[[:space:]]*(min_perf_pct|\[vm([^]]*)?\]|\[disk\])[[:space:]]*(=|$)' "${tuned_profile}"
+    test -x "${panel_helper}"
+    test -f "${panel_unit}"
+    grep -qx 'After=graphical-session-pre.target' "${panel_unit}"
+    ! grep -qx 'After=graphical-session.target' "${panel_unit}"
+    test -L "${panel_wants}"
+    test "$(readlink "${panel_wants}")" = '../../../../usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service'
+    grep -qx 'PANEL_AC_MODE=1920x1200@120.000+vrr' "${panel_defaults}"
+    grep -qx 'PANEL_BATTERY_MODE=1920x1200@60.000' "${panel_defaults}"
+    grep -qF 'external_drm_connector_is_connected' "${panel_helper}"
+    grep -qF 'AMBIENT_BRIGHTNESS_MIGRATION_ENABLED=true' "${panel_defaults}"
+    grep -qF 'dell-xps-9350-ambient-brightness-v1' "${panel_helper}"
+    grep -qx 'ambient-enabled=true' "${ambient_override}"
+    schema_tmp="${tmpdir}/xps-schemas"
+    install -d "${schema_tmp}"
+    cp /usr/share/glib-2.0/schemas/org.gnome.settings-daemon.enums.xml "${schema_tmp}/"
+    cp /usr/share/glib-2.0/schemas/org.gnome.settings-daemon.plugins.power.gschema.xml "${schema_tmp}/"
+    printf '%s\n' '[org.gnome.settings-daemon.plugins.power]' 'ambient-enabled=false' > "${schema_tmp}/zz0-base.gschema.override"
+    cp "${ambient_override}" "${schema_tmp}/"
+    glib-compile-schemas --strict "${schema_tmp}"
+    GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled | grep -qx true
+    tests/dell-xps-9350-policies.sh
+    test -f docs/dell-xps-9350-secure-boot.md
+    grep -qF 'cvs_provider=in-tree' docs/dell-xps-9350-secure-boot.md
+    grep -qF 'updates/purplefin' docs/dell-xps-9350-secure-boot.md
+    grep -qF 'run0 mokutil --import' docs/dell-xps-9350-secure-boot.md
+    grep -qF 'Linux 7.1.3 fallback status' docs/dell-xps-9350-secure-boot.md
+    ! grep -qw sudo docs/dell-xps-9350-secure-boot.md
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-activate
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/dell-ipu7-rebind-sensor
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/configure-firefox-pipewire-camera

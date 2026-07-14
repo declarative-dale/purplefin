@@ -20,8 +20,8 @@ laptop-specific hardware behavior.
 | Profile | Purpose |
 | --- | --- |
 | `generic-x86_64` | Common public x86_64 image with Purplefin packages, Flatpak preinstalls, and Homebrew bundle setup. |
-| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with Goodix fingerprint auth, 1Password integration, rEFInd theming, Dell-only IPU7 camera setup, and optional PAM U2F support for security keys. |
-| `dell-xps-9350-intel-no-ipu7` | Dell XPS 9350 Intel test profile with the same pinned mainline `7.1.x` kernel and non-camera laptop setup as the Dell profile, but without the IPU7 camera module, activation rules, or camera userspace. |
+| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with battery-longevity, laptop-performance, internal-panel, ambient-brightness, Goodix fingerprint, 1Password, rEFInd, Dell IPU7 camera, and optional PAM U2F policies. |
+| `dell-xps-9350-intel-no-ipu7` | Dell XPS 9350 Intel test profile with the same pinned mainline `7.1.x` kernel and non-camera laptop policies as the Dell profile, but without the IPU7 module, activation rules, or camera userspace. |
 
 The default profile is `generic-x86_64`.
 
@@ -70,19 +70,19 @@ Its neutral canary arguments are
 Generic profile:
 
 ```bash
-sudo bootc switch ghcr.io/declarative-dale/purplefin:generic-x86_64
+run0 bootc switch ghcr.io/declarative-dale/purplefin:generic-x86_64
 ```
 
 Dell XPS 9350 Intel profile:
 
 ```bash
-sudo bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel
+run0 bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel
 ```
 
 Dell XPS 9350 Intel no-IPU7 test profile:
 
 ```bash
-sudo bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel-no-ipu7
+run0 bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel-no-ipu7
 ```
 
 Reboot after switching.
@@ -121,9 +121,9 @@ To request immediate update checks instead of waiting for the timers and
 scheduled workflow, use:
 
 ```bash
-sudo systemctl start purplefin-bitwarden-flatpak-update.service
+run0 systemctl start purplefin-bitwarden-flatpak-update.service
 bw update
-sudo bootc upgrade
+run0 bootc upgrade
 ```
 
 `bw update` reports whether the image-baked CLI is behind upstream; it does not
@@ -141,8 +141,8 @@ Before upgrading, make sure the vault has completed a sync. Then deploy and
 boot the updated image:
 
 ```bash
-sudo bootc upgrade
-sudo systemctl reboot
+run0 bootc upgrade
+run0 systemctl reboot
 ```
 
 On the first boot into the updated image,
@@ -151,7 +151,7 @@ and stages its removal. If a removal was staged, reboot once more:
 
 ```bash
 systemctl status purplefin-firstboot-rpm-ostree.service
-sudo systemctl reboot
+run0 systemctl reboot
 ```
 
 The Flatpak uses `~/.var/app/com.bitwarden.desktop/` rather than the native
@@ -175,8 +175,8 @@ If the one-time task did not remove the old layer, remove it explicitly and
 reboot before launching the Flatpak:
 
 ```bash
-sudo rpm-ostree uninstall bitwarden
-sudo systemctl reboot
+run0 rpm-ostree uninstall bitwarden
+run0 systemctl reboot
 flatpak install --system flathub com.bitwarden.desktop
 ```
 
@@ -208,6 +208,79 @@ flatpak info com.nextcloud.desktopclient.nextcloud
 
 Nextcloud's Flatpak keeps application state in its sandbox, so launch it and
 configure the account again if the existing AppImage settings are not imported.
+
+## Dell XPS 13 9350 Hardware Policies
+
+Both Dell profiles carry the non-camera policies below. Every hardware helper
+checks for `Dell Inc.` / `XPS 13 9350` DMI data before changing anything.
+
+### Battery charging
+
+`purplefin-dell-xps-9350-battery.service` enables UPower's charge-threshold
+policy, selects Dell's `Custom` charging mode, and verifies a 75-80% charging
+window. This favors battery longevity over maximum unplugged runtime. The
+DMI-specific hardware database entry also makes the same limits explicit to
+UPower.
+
+Override the policy in `/etc/purplefin/dell-xps-9350-battery.conf`:
+
+```ini
+ENABLED=true
+START_THRESHOLD=75
+END_THRESHOLD=80
+```
+
+`ENABLED=false` prevents the service from applying the policy; it does not
+undo thresholds already stored by the firmware. Use Dell firmware settings or
+UPower to select a different charging policy when opting out. Verify an applied
+policy with:
+
+```bash
+run0 systemctl restart purplefin-dell-xps-9350-battery.service
+upower -i /org/freedesktop/UPower/devices/battery_BAT0 | \
+  rg 'charge-(start|end)-threshold|charge-threshold-enabled'
+cat /sys/class/power_supply/BAT0/{charge_types,charge_control_start_threshold,charge_control_end_threshold}
+```
+
+### Power profiles
+
+GNOME and `powerprofilesctl` continue to use TuneD. Balanced mode retains
+Bluefin's normal AC/battery behavior. Performance mode now maps to
+`purplefin-dell-xps-9350-performance`, which inherits TuneD's balanced laptop
+profile and changes only CPU energy preference, boost, and Dell's firmware
+platform profile. It deliberately omits the server-oriented disk, VM, sysctl,
+and `min_perf_pct=100` settings from `throughput-performance`.
+
+```bash
+powerprofilesctl set performance
+tuned-adm active
+cat /sys/firmware/acpi/platform_profile
+cat /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference
+```
+
+### Internal display and ambient brightness
+
+The graphical-session user service selects the built-in FHD+ panel's
+`1920x1200@120.000+vrr` mode on AC and fixed `1920x1200@60.000` mode on battery. It
+discovers the exact advertised mode, preserves scale, transform, position, and
+primary state, and refuses to act whenever an external connector or a complex
+layout is present. A one-time migration enables GNOME ambient brightness; any
+later choice made in GNOME Settings remains authoritative.
+
+Copy `/usr/share/purplefin/dell-xps-9350-panel.conf` to
+`~/.config/purplefin/dell-xps-9350-panel.conf` to change the mode selectors,
+poll interval, ambient-brightness migration, or `PANEL_POLICY_ENABLED`. Apply a
+change with:
+
+```bash
+systemctl --user restart purplefin-dell-xps-9350-panel.service
+gdctl show --modes --properties
+```
+
+Secure Boot is intentionally not enabled while the Linux 7.1 camera path uses
+an unsigned external `intel_cvs` module. Follow the gated
+[Dell XPS 13 9350 Secure Boot runbook](docs/dell-xps-9350-secure-boot.md) only
+after Purplefin has selected the signed in-tree CVS provider.
 
 ## Dell IPU7 Camera Flow
 
@@ -319,6 +392,7 @@ non-working IPU7 inputs.
 - Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
 - Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
+- Dell XPS 9350 Intel DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD Performance profile, AC/battery internal-panel refresh policy, and one-time user-overridable ambient-brightness enablement.
 - Dell XPS 9350 Intel profile files for fingerprint auth.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
 - Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
