@@ -25,24 +25,30 @@ bootc image:
 | Role | Workload |
 | --- | --- |
 | `base` | Shared image foundation, including Git and Micro. |
-| `support` | Base plus Espanso, RustConn, and optional PAM U2F policy. |
+| `support` | Base plus Espanso and RustConn. |
 | `development` | Base plus Ghostty, VSCodium, Ansible, Packer, OpenTofu, and OpenBao. |
-| `workstation` | Base plus both support and development, preserving the complete legacy payload. |
+| `workstation` | Base plus both support and development for the full workstation workload. |
 
 | Hardware profile | Overlay |
 | --- | --- |
 | `generic-x86_64` | Generic x86-64 hardware with no vendor-specific overlay. |
 | `desktop-x86_64` | Neutral generic x86-64 desktop scaffold for future hardware policy. |
 | `lenovo-generic` | Neutral Lenovo scaffold for future hardware policy. |
-| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, fingerprint support, rEFInd, and the IPU7 camera stack. |
+| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, rEFInd, and the IPU7 camera stack. |
 | `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera policies and pinned mainline kernel, but no IPU7 camera integration. |
+
+Every hardware profile also applies the shared hardware-security baseline:
+fingerprint authentication, PAM U2F/FIDO2 support, YubiKey management, and
+smart-card services. User-specific fingerprint enrollments and security-key
+mappings remain local to each machine and are never built into an image.
 
 The defaults remain `workstation` and `generic-x86_64`. The legacy
 `generic-x86_64`, `latest`, and `dell-xps-9350-intel` tags use the workstation
-role and preserve their existing payloads. Roles and hardware profiles are
-build inputs, not packages or layers selected by the installer. Each supported
-pair is precomposed and published as one complete OCI image; `bootc install`,
-`bootc switch`, and subsequent upgrades track that single final tag.
+role, retain their previous workload, and gain the shared hardware-security
+baseline. Roles and hardware profiles are build inputs, not packages or layers
+selected by the installer. Each supported pair is precomposed and published as
+one complete OCI image; `bootc install`, `bootc switch`, and subsequent upgrades
+track that single final tag.
 
 The build workflow publishes these representative combinations:
 
@@ -400,8 +406,8 @@ non-working IPU7 inputs.
 - A centralized first-boot rpm-ostree runner with ordered tasks and
   `/var/lib/purplefin/firstboot/*.done` markers. It stops when a task stages a
   deployment so later tasks run after the required reboot.
-- The support role's graphical-session-bound Espanso service and capability,
-  RustConn Flatpak, and optional PAM U2F policy.
+- The support role's graphical-session-bound Espanso service and capability and
+  RustConn Flatpak.
 - The development role's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
   OpenTofu, OpenBao, HashiCorp repository, and OpenBao state-directory policy.
 - The workstation role as the supported union of the support and development
@@ -410,11 +416,13 @@ non-working IPU7 inputs.
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
 - Dell XPS 9350 Intel DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD Performance profile, AC/battery internal-panel refresh policy, and one-time user-overridable ambient-brightness enablement.
-- Dell XPS 9350 Intel hardware files for fingerprint authentication.
+- A shared hardware-security baseline for every hardware profile, including
+  fingerprint authentication, PAM U2F/FIDO2, YubiKey management, and smart-card
+  services.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
-- Optional support-role PAM U2F support for security keys. User-specific key
-  mappings are not included; register a key after switching with
-  `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
+- User-specific PAM U2F key mappings are not included. After switching, create
+  the configuration directory and register a key with
+  `mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked
 

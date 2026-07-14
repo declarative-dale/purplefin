@@ -5,8 +5,6 @@ profile_root="/tmp/purplefin-profile-files/dell-xps-9350-intel/system_files"
 
 # shellcheck source=/tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
 source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
-# shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
-source /tmp/purplefin-build/profiles/lib/authselect-features.sh
 
 echo ":: Applying Dell XPS 9350 Intel hardware overlay"
 cp -a "${profile_root}/." /
@@ -486,7 +484,3 @@ purplefin_configure_dell_xps_9350_common
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service
-
-echo ":: Ensuring fingerprint stack is present"
-dnf5 -y install fprintd libfprint
-purplefin_authselect_request with-fingerprint

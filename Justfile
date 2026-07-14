@@ -158,18 +158,13 @@ check:
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
     grep -qF '### Migrating Bitwarden from the layered RPM' README.md
 
-    # Support owns Espanso, RustConn, and PAM U2F.
+    # Support owns Espanso and RustConn only.
     support_role=build_files/profiles/roles/support.sh
     support_root=profile_files/roles/support
     grep -qF 'purplefin_apply_role_overlay support' "${support_role}"
     grep -qF 'install espanso-wayland' "${support_role}"
     grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' "${support_role}"
     grep -qF 'systemctl --global enable espanso.service' "${support_role}"
-    for package in pam-u2f pamu2fcfg libfido2 opensc pcsc-lite yubikey-manager; do
-        grep -qE "^[[:space:]]*${package}$" "${support_role}"
-    done
-    grep -qF 'purplefin_authselect_request with-pam-u2f' "${support_role}"
-    grep -qF 'systemctl enable pcscd.socket' "${support_role}"
     test -f "${support_root}/manifests/flatpaks.preinstall"
     grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${support_root}/manifests/flatpaks.preinstall"
     ! grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${support_root}/manifests/flatpaks.preinstall"
@@ -181,7 +176,26 @@ check:
     grep -qxF 'WantedBy=graphical-session.target' "${espanso_unit}"
     ! grep -qxF 'WantedBy=default.target' "${espanso_unit}"
     test ! -e system_files/usr/lib/systemd/user/espanso.service
-    ! rg -q 'pam-u2f|pamu2fcfg|pcscd' build_files/profiles/dell-xps-9350-intel.sh build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+    ! rg -q 'pam-u2f|pamu2fcfg|libfido2|opensc|pcsc-lite|pcscd|yubikey-manager|with-fingerprint|with-pam-u2f' build_files/profiles/roles
+
+    # Every hardware selection receives the same biometric, security-key, and
+    # smart-card baseline as part of its hardware phase.
+    hardware_security=build_files/profiles/lib/hardware-security.sh
+    test -f "${hardware_security}"
+    grep -qF 'hardware_security_lib="/tmp/purplefin-build/profiles/lib/hardware-security.sh"' build_files/build.sh
+    grep -qF 'source "${hardware_security_lib}"' build_files/build.sh
+    grep -qF 'purplefin_apply_hardware_security' build_files/build.sh
+    for package in fprintd fprintd-pam libfprint pam-u2f pamu2fcfg libfido2 opensc pcsc-lite yubikey-manager; do
+        grep -qE "^[[:space:]]*${package}$" "${hardware_security}"
+    done
+    grep -qF 'purplefin_authselect_request with-fingerprint with-pam-u2f' "${hardware_security}"
+    grep -qF 'systemctl enable pcscd.socket' "${hardware_security}"
+    ! rg -q 'dnf5 -y install fprintd libfprint|pam-u2f|pamu2fcfg|libfido2|opensc|pcsc-lite|pcscd|yubikey-manager|with-fingerprint|with-pam-u2f' \
+        build_files/profiles/generic-x86_64.sh \
+        build_files/profiles/desktop-x86_64.sh \
+        build_files/profiles/lenovo-generic.sh \
+        build_files/profiles/dell-xps-9350-intel.sh \
+        build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
 
     # Development owns Ghostty, infrastructure tools, and VSCodium.
     development_role=build_files/profiles/roles/development.sh
@@ -285,8 +299,6 @@ check:
     for profile_script in build_files/profiles/dell-xps-9350-intel.sh build_files/profiles/dell-xps-9350-intel-no-ipu7.sh; do
         grep -qF 'source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh' "${profile_script}"
         grep -qF 'purplefin_configure_dell_xps_9350_common' "${profile_script}"
-        grep -qF 'dnf5 -y install fprintd libfprint' "${profile_script}"
-        grep -qF 'purplefin_authselect_request with-fingerprint' "${profile_script}"
     done
     for common_path in \
         usr/lib/purplefin/dell-xps-9350-battery.conf \

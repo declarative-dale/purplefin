@@ -6,6 +6,7 @@ role="${2:-${BUILD_ROLE:-workstation}}"
 profile_script="/tmp/purplefin-build/profiles/${profile}.sh"
 role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"
 authselect_lib="/tmp/purplefin-build/profiles/lib/authselect-features.sh"
+hardware_security_lib="/tmp/purplefin-build/profiles/lib/hardware-security.sh"
 
 if [[ ! "${profile}" =~ ^[a-z0-9._-]+$ ]]; then
 	echo "Invalid hardware profile: ${profile}" >&2
@@ -33,6 +34,8 @@ fi
 
 # shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
 source "${authselect_lib}"
+# shellcheck source=/tmp/purplefin-build/profiles/lib/hardware-security.sh
+source "${hardware_security_lib}"
 purplefin_authselect_reset
 
 install -d /usr/share/purplefin
@@ -127,6 +130,7 @@ echo ":: Applying Purplefin build role: ${role}"
 
 echo ":: Applying Purplefin hardware profile: ${profile}"
 "${profile_script}"
+purplefin_apply_hardware_security "${profile}"
 
 purplefin_authselect_finalize
 
