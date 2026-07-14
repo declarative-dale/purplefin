@@ -14,20 +14,21 @@ ghcr.io/declarative-dale/purplefin
 
 ## Build-Time Composition
 
-Purplefin follows a base → role → hardware build pipeline and emits one final
-bootc image:
+Purplefin composes one department with one hardware profile and emits one final
+bootc image. The common foundation is applied first, followed by the selected
+department and hardware profile:
 
-- `BUILD_ROLE` selects the software workload.
+- `BUILD_ROLE` selects the department workload. Its historical name is retained
+  for build compatibility.
 - `BUILD_PROFILE` selects the hardware overlay. The historical variable name is
   retained for compatibility, but it now means hardware rather than the whole
   image personality.
 
-| Role | Workload |
+| Department | Workload |
 | --- | --- |
 | `base` | Shared image foundation, including Git and Micro. |
 | `support` | Base plus Espanso and RustConn. |
 | `development` | Base plus Ghostty, VSCodium, Ansible, Packer, OpenTofu, and OpenBao. |
-| `workstation` | Base plus both support and development for the full workstation workload. |
 
 | Hardware profile | Overlay |
 | --- | --- |
@@ -42,22 +43,20 @@ fingerprint authentication, PAM U2F/FIDO2 support, YubiKey management, and
 smart-card services. User-specific fingerprint enrollments and security-key
 mappings remain local to each machine and are never built into an image.
 
-The defaults remain `workstation` and `generic-x86_64`. The legacy
-`generic-x86_64`, `latest`, and `dell-xps-9350-intel` tags use the workstation
-role, retain their previous workload, and gain the shared hardware-security
-baseline. Roles and hardware profiles are build inputs, not packages or layers
-selected by the installer. Each supported pair is precomposed and published as
-one complete OCI image; `bootc install`, `bootc switch`, and subsequent upgrades
-track that single final tag.
+The default pair is the `base` department with `generic-x86_64` hardware. The
+`generic-x86_64` and `latest` compatibility tags point to that same build. The
+`dell-xps-9350-intel` compatibility tag points to the `support` department with
+the Dell hardware profile. Departments and hardware profiles are independent
+build inputs, but every published image contains exactly one of each; they are
+not packages or layers selected by the installer. `bootc install`, `bootc
+switch`, and subsequent upgrades track that single precomposed image tag.
 
 The build workflow publishes these representative combinations:
 
-| Role | Hardware | Image tag |
+| Department | Hardware | Image tags |
 | --- | --- | --- |
-| `workstation` | `generic-x86_64` | `generic-x86_64` and `latest` |
-| `workstation` | `dell-xps-9350-intel` | `dell-xps-9350-intel` |
-| `base` | `generic-x86_64` | `base-generic-x86_64` |
-| `support` | `dell-xps-9350-intel` | `support-dell-xps-9350-intel` |
+| `base` | `generic-x86_64` | `generic-x86_64`, `latest`, and `base-generic-x86_64` |
+| `support` | `dell-xps-9350-intel` | `dell-xps-9350-intel` and `support-dell-xps-9350-intel` |
 | `support` | `lenovo-generic` | `support-lenovo-generic` |
 | `development` | `desktop-x86_64` | `development-desktop-x86_64` |
 
@@ -73,9 +72,10 @@ just build-support-lenovo
 just build-development-desktop
 ```
 
-The first three recipes are compatibility entry points and build the
-`workstation` role. The remaining recipes exercise representative role and
-hardware combinations.
+The first three recipes are compatibility entry points: generic builds
+`base` + `generic-x86_64`, while both Dell recipes build `support` with the
+corresponding Dell hardware profile. The remaining recipes name their
+department and hardware combinations explicitly.
 
 The `just` targets inspect Bluefin's `ostree.linux` label and write the matching
 kernel label into the derived image. For an equivalent direct build, resolve
@@ -85,7 +85,7 @@ that value first:
 base_kernel="$(skopeo inspect docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
 target_kernel="$(build_files/select-ostree-linux.sh dell-xps-9350-intel "${base_kernel}")"
 podman build \
-  --build-arg BUILD_ROLE=workstation \
+  --build-arg BUILD_ROLE=support \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_OSTREE_LINUX="${target_kernel}" \
   --label "ostree.linux=${target_kernel}" \
@@ -97,7 +97,7 @@ The Dell profile also accepts build-time kernel canary arguments:
 
 ```bash
 podman build \
-  --build-arg BUILD_ROLE=workstation \
+  --build-arg BUILD_ROLE=support \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_DELL_IPU7_KERNEL_EVR=7.1.2-355.vanilla.fc44 \
   --build-arg PURPLEFIN_OSTREE_LINUX=7.1.2-355.vanilla.fc44.x86_64 \
@@ -113,7 +113,7 @@ Its neutral canary arguments are
 
 ## Switch To An Image
 
-Select the tag containing the role and hardware you want. For example:
+Select the complete department and hardware build you want. For example:
 
 ```bash
 run0 bootc switch ghcr.io/declarative-dale/purplefin:generic-x86_64
@@ -122,15 +122,16 @@ run0 bootc switch ghcr.io/declarative-dale/purplefin:development-desktop-x86_64
 ```
 
 Reboot after switching. Switching changes the complete tracked image; bootc
-does not combine a role tag with a separate hardware tag at installation time.
+does not combine a department tag with a separate hardware tag at installation
+time.
 
-The `latest` tag tracks the generic workstation image. Use the
-`dell-xps-9350-intel` tag for the full workstation plus Dell IPU7 image. The
-local `build-dell-no-ipu7` compatibility recipe produces the Dell no-camera
-test image. The full Dell camera profile uses the pinned
+The `latest` tag tracks the `base` + `generic-x86_64` image. The
+`dell-xps-9350-intel` tag tracks `support` + Dell IPU7. The local
+`build-dell-no-ipu7` compatibility recipe produces the `support` + Dell
+no-camera test image. The full Dell camera profile uses the pinned
 7.1.2 fallback only while Bluefin's kernel is older than 7.1.2, then follows
-Bluefin's kernel. Development and workstation images provide `packer`,
-`ansible`, `tofu`, and `bao`. The base role provides Git and Micro. Inherited
+Bluefin's kernel. The development department provides `packer`, `ansible`,
+`tofu`, and `bao`. The base department provides Git and Micro. Inherited
 Tailscale packages, services, repositories, setup hooks, and user-facing tips
 are removed from every composition.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
@@ -394,8 +395,8 @@ non-working IPU7 inputs.
 
 ## What Is Tracked
 
-- Base → role → hardware composition with the selected role and hardware written
-  into image metadata.
+- Common foundation → department → hardware composition with the selected
+  department and hardware written into image metadata.
 - A shared base containing Git, Micro, Fedora's FUSE 2 runtime,
   `wireguard-tools`, the NetworkManager connection editor, the complete Homebrew
   `Brewfile`, branding, and common Flatpak preinstalls such as Bitwarden,
@@ -406,12 +407,10 @@ non-working IPU7 inputs.
 - A centralized first-boot rpm-ostree runner with ordered tasks and
   `/var/lib/purplefin/firstboot/*.done` markers. It stops when a task stages a
   deployment so later tasks run after the required reboot.
-- The support role's graphical-session-bound Espanso service and capability and
+- The support department's graphical-session-bound Espanso service and capability and
   RustConn Flatpak.
-- The development role's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
+- The development department's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
   OpenTofu, OpenBao, HashiCorp repository, and OpenBao state-directory policy.
-- The workstation role as the supported union of the support and development
-  workloads used by the legacy tags.
 - Removal of inherited Tailscale packages, enabled services, RPM repository
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.

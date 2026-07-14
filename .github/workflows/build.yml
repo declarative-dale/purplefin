@@ -18,28 +18,22 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.role }} / ${{ matrix.hardware }}
+    name: Build ${{ matrix.department }} / ${{ matrix.hardware }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - role: workstation
+          - department: base
             hardware: generic-x86_64
-            tags: generic-x86_64 latest
-          - role: workstation
+            tags: generic-x86_64 latest base-generic-x86_64
+          - department: support
             hardware: dell-xps-9350-intel
-            tags: dell-xps-9350-intel
-          - role: base
-            hardware: generic-x86_64
-            tags: base-generic-x86_64
-          - role: support
-            hardware: dell-xps-9350-intel
-            tags: support-dell-xps-9350-intel
-          - role: support
+            tags: dell-xps-9350-intel support-dell-xps-9350-intel
+          - department: support
             hardware: lenovo-generic
             tags: support-lenovo-generic
-          - role: development
+          - department: development
             hardware: desktop-x86_64
             tags: development-desktop-x86_64
 
@@ -63,7 +57,7 @@ jobs:
           tags: ${{ matrix.tags }}
           containerfiles: ./Containerfile
           build-args: |
-            BUILD_ROLE=${{ matrix.role }}
+            BUILD_ROLE=${{ matrix.department }}
             BUILD_PROFILE=${{ matrix.hardware }}
             BASE_IMAGE=ghcr.io/ublue-os/bluefin
             BASE_TAG=stable

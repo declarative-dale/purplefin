@@ -2,7 +2,7 @@
 set -euo pipefail
 
 profile="${1:-${BUILD_PROFILE:-generic-x86_64}}"
-role="${2:-${BUILD_ROLE:-workstation}}"
+role="${2:-${BUILD_ROLE:-base}}"
 profile_script="/tmp/purplefin-build/profiles/${profile}.sh"
 role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"
 authselect_lib="/tmp/purplefin-build/profiles/lib/authselect-features.sh"

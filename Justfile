@@ -84,18 +84,18 @@ check:
         system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -e "${firstboot_test}/pending-markers/40-pending.done"
 
-    # The build produces one base -> role -> hardware image and rejects unknown inputs.
-    for role in base support development workstation; do
-        test -x "build_files/profiles/roles/${role}.sh"
+    # Each build composes exactly one department with exactly one hardware profile.
+    for department in base support development; do
+        test -x "build_files/profiles/roles/${department}.sh"
     done
     for hardware in generic-x86_64 desktop-x86_64 lenovo-generic dell-xps-9350-intel dell-xps-9350-intel-no-ipu7; do
         test -x "build_files/profiles/${hardware}.sh"
     done
-    grep -qF 'ARG BUILD_ROLE=workstation' Containerfile
+    grep -qF 'ARG BUILD_ROLE=base' Containerfile
     grep -qF 'ARG BUILD_PROFILE=generic-x86_64' Containerfile
     grep -qF 'BUILD_ROLE="${BUILD_ROLE}"' Containerfile
     grep -qF '/tmp/purplefin-build/build.sh "${BUILD_PROFILE}" "${BUILD_ROLE}"' Containerfile
-    grep -qF 'role="${2:-${BUILD_ROLE:-workstation}}"' build_files/build.sh
+    grep -qF 'role="${2:-${BUILD_ROLE:-base}}"' build_files/build.sh
     grep -qF 'role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"' build_files/build.sh
     grep -qF 'printf '\''%s\n'\'' "${profile}" > /usr/share/purplefin/build-hardware' build_files/build.sh
     grep -qF 'printf '\''%s\n'\'' "${role}" > /usr/share/purplefin/build-role' build_files/build.sh
@@ -229,8 +229,6 @@ check:
     test ! -e system_files/etc/yum.repos.d/hashicorp.repo
     grep -qx 'excludepkgs=bitwarden\*' system_files/etc/yum.repos.d/terra.repo
 
-    grep -qF '/tmp/purplefin-build/profiles/roles/support.sh' build_files/profiles/roles/workstation.sh
-    grep -qF '/tmp/purplefin-build/profiles/roles/development.sh' build_files/profiles/roles/workstation.sh
     grep -qF 'cp -a "${system_root}/." /' build_files/profiles/lib/role-common.sh
     grep -qF '/usr/share/flatpak/preinstall.d/purplefin-${role}.preinstall' build_files/profiles/lib/role-common.sh
 
@@ -269,12 +267,26 @@ check:
     test "$(build_files/select-ostree-linux.sh desktop-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh lenovo-generic 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     grep -qF 'BUILD_ROLE=' .github/workflows/build.yml
-    grep -qF 'matrix.role' .github/workflows/build.yml
+    grep -qF 'matrix.department' .github/workflows/build.yml
     grep -qF 'BUILD_PROFILE=' .github/workflows/build.yml
     grep -qF 'matrix.hardware' .github/workflows/build.yml
-    for tag in generic-x86_64 latest dell-xps-9350-intel base-generic-x86_64 support-dell-xps-9350-intel support-lenovo-generic development-desktop-x86_64; do
-        grep -qw "${tag}" .github/workflows/build.yml
-    done
+    test "$(grep -c '^          - department:' .github/workflows/build.yml)" -eq 4
+    ci_matrix="$(awk '
+        $1 == "-" && $2 == "department:" { department = $3 }
+        $1 == "hardware:" { hardware = $2 }
+        $1 == "tags:" && department != "" {
+            tags = $0
+            sub(/^[[:space:]]*tags:[[:space:]]*/, "", tags)
+            print department "|" hardware "|" tags
+            department = ""
+            hardware = ""
+        }
+    ' .github/workflows/build.yml)"
+    test "${ci_matrix}" = "$(printf '%s\n' \
+        'base|generic-x86_64|generic-x86_64 latest base-generic-x86_64' \
+        'support|dell-xps-9350-intel|dell-xps-9350-intel support-dell-xps-9350-intel' \
+        'support|lenovo-generic|support-lenovo-generic' \
+        'development|desktop-x86_64|development-desktop-x86_64')"
     grep -qF 'PURPLEFIN_OSTREE_LINUX=' .github/workflows/build.yml
     grep -qF 'ostree.linux=' .github/workflows/build.yml
     grep -qF 'steps.kernel.outputs.release' .github/workflows/build.yml
@@ -575,7 +587,7 @@ check:
     test ! -e "${refind_tmp}/EFI/refind/themes/rEFInd-Regular-Dark/icons/os_ubuntu.png"
     test "$(grep -c '^include themes/rEFInd-Regular-Dark/theme.conf$' "${refind_tmp}/EFI/refind/refind.conf")" -eq 1
 
-_build role hardware tag:
+_build department hardware tag:
     #!/usr/bin/env bash
     set -euo pipefail
     base_image='ghcr.io/ublue-os/bluefin:stable'
@@ -583,7 +595,7 @@ _build role hardware tag:
     target_kernel="$(build_files/select-ostree-linux.sh '{{ hardware }}' "${base_kernel}")"
     podman build \
         --pull=missing \
-        --build-arg BUILD_ROLE='{{ role }}' \
+        --build-arg BUILD_ROLE='{{ department }}' \
         --build-arg BUILD_PROFILE='{{ hardware }}' \
         --build-arg PURPLEFIN_OSTREE_LINUX="${target_kernel}" \
         --label "ostree.linux=${target_kernel}" \
@@ -591,13 +603,13 @@ _build role hardware tag:
         .
 
 build-generic:
-    just _build workstation generic-x86_64 {{ image }}:generic-x86_64
+    just _build base generic-x86_64 {{ image }}:generic-x86_64
 
 build-dell:
-    just _build workstation dell-xps-9350-intel {{ image }}:dell-xps-9350-intel
+    just _build support dell-xps-9350-intel {{ image }}:dell-xps-9350-intel
 
 build-dell-no-ipu7:
-    just _build workstation dell-xps-9350-intel-no-ipu7 {{ image }}:dell-xps-9350-intel-no-ipu7
+    just _build support dell-xps-9350-intel-no-ipu7 {{ image }}:dell-xps-9350-intel-no-ipu7
 
 build-base-generic:
     just _build base generic-x86_64 {{ image }}:base-generic-x86_64
