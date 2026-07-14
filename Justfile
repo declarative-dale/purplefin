@@ -290,6 +290,12 @@ check:
     grep -qF 'PURPLEFIN_OSTREE_LINUX=' .github/workflows/build.yml
     grep -qF 'ostree.linux=' .github/workflows/build.yml
     grep -qF 'steps.kernel.outputs.release' .github/workflows/build.yml
+    grep -qF 'uses: actions/checkout@v7' .github/workflows/build.yml
+    grep -qF 'uses: actions/checkout@v7' .github/workflows/update-bitwarden-cli.yml
+    grep -qF 'buildah bud' .github/workflows/build.yml
+    grep -qF 'podman login' .github/workflows/build.yml
+    grep -qF 'podman push' .github/workflows/build.yml
+    ! rg -q 'actions/checkout@v4|redhat-actions/(buildah-build|podman-login|push-to-registry)' .github/workflows
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
     grep -qF '/var/lib/rpm-state' build_files/build.sh

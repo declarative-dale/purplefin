@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve boot kernel metadata
         id: kernel
@@ -50,37 +50,55 @@ jobs:
           echo "release=${target_kernel}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
-        id: build
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          tags: ${{ matrix.tags }}
-          containerfiles: ./Containerfile
-          build-args: |
-            BUILD_ROLE=${{ matrix.department }}
-            BUILD_PROFILE=${{ matrix.hardware }}
-            BASE_IMAGE=ghcr.io/ublue-os/bluefin
-            BASE_TAG=stable
-            PURPLEFIN_OSTREE_LINUX=${{ steps.kernel.outputs.release }}
-          labels: |
-            ostree.linux=${{ steps.kernel.outputs.release }}
+        env:
+          TAGS: ${{ matrix.tags }}
+          BUILD_ROLE: ${{ matrix.department }}
+          BUILD_PROFILE: ${{ matrix.hardware }}
+          PURPLEFIN_OSTREE_LINUX: ${{ steps.kernel.outputs.release }}
+        shell: bash
+        run: |
+          read -r -a tags <<< "${TAGS}"
+          primary_image="${IMAGE_NAME}:${tags[0]}"
+
+          buildah bud \
+            --file ./Containerfile \
+            --label "ostree.linux=${PURPLEFIN_OSTREE_LINUX}" \
+            --build-arg "BUILD_ROLE=${BUILD_ROLE}" \
+            --build-arg "BUILD_PROFILE=${BUILD_PROFILE}" \
+            --build-arg BASE_IMAGE=ghcr.io/ublue-os/bluefin \
+            --build-arg BASE_TAG=stable \
+            --build-arg "PURPLEFIN_OSTREE_LINUX=${PURPLEFIN_OSTREE_LINUX}" \
+            --format docker \
+            --tls-verify=true \
+            --tag "${primary_image}" \
+            .
+
+          for tag in "${tags[@]:1}"; do
+            buildah tag "${primary_image}" "${IMAGE_NAME}:${tag}"
+          done
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
-        uses: redhat-actions/podman-login@v1
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          printf '%s' "${GHCR_TOKEN}" |
+            podman login "${REGISTRY}" --username "${GITHUB_ACTOR}" --password-stdin
 
       - name: Push image
         if: github.event_name != 'pull_request'
-        id: push
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build.outputs.image }}
-          tags: ${{ steps.build.outputs.tags }}
-          registry: ${{ env.REGISTRY }}
+        env:
+          TAGS: ${{ matrix.tags }}
+        shell: bash
+        run: |
+          read -r -a tags <<< "${TAGS}"
+          for tag in "${tags[@]}"; do
+            podman push --quiet \
+              "${IMAGE_NAME}:${tag}" \
+              "${REGISTRY}/${IMAGE_NAME}:${tag}" \
+              --tls-verify=true
+          done
 
       - name: Install cosign
         if: github.event_name != 'pull_request'
@@ -92,3 +110,8 @@ jobs:
           for tag in ${{ matrix.tags }}; do
             cosign sign --yes "${REGISTRY}/${IMAGE_NAME}:${tag}"
           done
+
+      - name: Log out of GHCR
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        continue-on-error: true
+        run: podman logout "${REGISTRY}"
