@@ -4,6 +4,7 @@ ARG BASE_TAG=stable
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
 ARG BUILD_PROFILE=generic-x86_64
+ARG BUILD_ROLE=workstation
 ARG IMAGE_NAME=purplefin
 ARG IMAGE_VENDOR=declarative-dale
 ARG PURPLEFIN_DELL_IPU7_KERNEL_EVR=
@@ -30,7 +31,8 @@ RUN PURPLEFIN_DELL_IPU7_KERNEL_EVR="${PURPLEFIN_DELL_IPU7_KERNEL_EVR}" \
     PURPLEFIN_DELL_MAINLINE_KERNEL_EVR="${PURPLEFIN_DELL_MAINLINE_KERNEL_EVR}" \
     PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED="${PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED}" \
     PURPLEFIN_OSTREE_LINUX="${PURPLEFIN_OSTREE_LINUX}" \
-    /tmp/purplefin-build/build.sh "${BUILD_PROFILE}" && \
+    BUILD_ROLE="${BUILD_ROLE}" \
+    /tmp/purplefin-build/build.sh "${BUILD_PROFILE}" "${BUILD_ROLE}" && \
     rm -rf /tmp/purplefin-build /tmp/purplefin-profile-files && \
     bootc container lint && \
     ostree container commit

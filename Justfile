@@ -13,6 +13,8 @@ check:
     refind_tmp="$(mktemp -d)"
     trap 'rm -rf "${tmpdir}" "${refind_tmp}"' EXIT
     cp -a system_files/. "${tmpdir}/"
+    cp -a profile_files/roles/support/system_files/. "${tmpdir}/"
+    cp -a profile_files/roles/development/system_files/. "${tmpdir}/"
     cp -a profile_files/dell-xps-9350-intel/system_files/. "${tmpdir}/"
     install -d "${tmpdir}/usr/lib/systemd/system"
     install -d "${tmpdir}/usr/bin" "${tmpdir}/usr/sbin"
@@ -42,18 +44,85 @@ check:
     fi
     env -u XDG_RUNTIME_DIR udevadm verify --root="${tmpdir}" /usr/lib/udev/rules.d/99-purplefin-dell-ipu7-camera.rules
 
+    # Retired first-boot tasks lose their stale completion markers safely.
+    firstboot_test="${tmpdir}/firstboot-test"
+    install -d "${firstboot_test}/bin" "${firstboot_test}/markers" "${firstboot_test}/tasks"
+    ln -s /usr/bin/true "${firstboot_test}/bin/rpm-ostree"
+    ln -s /usr/bin/true "${firstboot_test}/tasks/10-active"
+    touch "${firstboot_test}/markers/10-active.done" "${firstboot_test}/markers/20-retired.done"
+    env \
+        PATH="${firstboot_test}/bin:${PATH}" \
+        PURPLEFIN_FIRSTBOOT_HELPER="${PWD}/system_files/usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_TASK_DIR="${firstboot_test}/tasks" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_MARKER_DIR="${firstboot_test}/markers" \
+        PURPLEFIN_FIRSTBOOT_REBOOT_REQUIRED_FILE="${firstboot_test}/reboot-required" \
+        system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
+    test -e "${firstboot_test}/markers/10-active.done"
+    test ! -e "${firstboot_test}/markers/20-retired.done"
+
+    install -d "${firstboot_test}/retired-markers"
+    touch "${firstboot_test}/retired-markers/30-retired.done"
+    env \
+        PATH="${firstboot_test}/bin:${PATH}" \
+        PURPLEFIN_FIRSTBOOT_HELPER="${PWD}/system_files/usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_TASK_DIR="${firstboot_test}/retired-tasks" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_MARKER_DIR="${firstboot_test}/retired-markers" \
+        PURPLEFIN_FIRSTBOOT_REBOOT_REQUIRED_FILE="${firstboot_test}/retired-reboot-required" \
+        system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
+    test ! -e "${firstboot_test}/retired-markers/30-retired.done"
+
+    install -d "${firstboot_test}/pending-bin" "${firstboot_test}/pending-markers"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 77' > "${firstboot_test}/pending-bin/rpm-ostree"
+    chmod 0755 "${firstboot_test}/pending-bin/rpm-ostree"
+    touch "${firstboot_test}/pending-markers/40-pending.done"
+    env \
+        PATH="${firstboot_test}/pending-bin:${PATH}" \
+        PURPLEFIN_FIRSTBOOT_HELPER="${PWD}/system_files/usr/libexec/purplefin/lib/rpm-ostree-firstboot.sh" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_TASK_DIR="${firstboot_test}/pending-tasks" \
+        PURPLEFIN_FIRSTBOOT_RPM_OSTREE_MARKER_DIR="${firstboot_test}/pending-markers" \
+        PURPLEFIN_FIRSTBOOT_REBOOT_REQUIRED_FILE="${firstboot_test}/pending-reboot-required" \
+        system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
+    test -e "${firstboot_test}/pending-markers/40-pending.done"
+
+    # The build produces one base -> role -> hardware image and rejects unknown inputs.
+    for role in base support development workstation; do
+        test -x "build_files/profiles/roles/${role}.sh"
+    done
+    for hardware in generic-x86_64 desktop-x86_64 lenovo-generic dell-xps-9350-intel dell-xps-9350-intel-no-ipu7; do
+        test -x "build_files/profiles/${hardware}.sh"
+    done
+    grep -qF 'ARG BUILD_ROLE=workstation' Containerfile
+    grep -qF 'ARG BUILD_PROFILE=generic-x86_64' Containerfile
+    grep -qF 'BUILD_ROLE="${BUILD_ROLE}"' Containerfile
+    grep -qF '/tmp/purplefin-build/build.sh "${BUILD_PROFILE}" "${BUILD_ROLE}"' Containerfile
+    grep -qF 'role="${2:-${BUILD_ROLE:-workstation}}"' build_files/build.sh
+    grep -qF 'role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"' build_files/build.sh
+    grep -qF 'printf '\''%s\n'\'' "${profile}" > /usr/share/purplefin/build-hardware' build_files/build.sh
+    grep -qF 'printf '\''%s\n'\'' "${role}" > /usr/share/purplefin/build-role' build_files/build.sh
+    grep -qF '"${role_script}"' build_files/build.sh
+    grep -qF '"${profile_script}"' build_files/build.sh
+    grep -qF 'purplefin_authselect_finalize' build_files/build.sh
+
+    # Base/common content is present in every role.
     test -f manifests/Brewfile
+    grep -qF 'marp-cli' manifests/Brewfile
     test -f manifests/flatpaks.preinstall
-    grep -qF '[Flatpak Preinstall com.bitwarden.desktop]' manifests/flatpaks.preinstall
-    grep -qF '[Flatpak Preinstall it.mijorus.gearlever]' manifests/flatpaks.preinstall
-    grep -qF '[Flatpak Preinstall com.nextcloud.desktopclient.nextcloud]' manifests/flatpaks.preinstall
-    grep -qF '[Flatpak Preinstall hu.irl.cameractrls]' manifests/flatpaks.preinstall
+    for app_id in com.bitwarden.desktop it.mijorus.gearlever com.nextcloud.desktopclient.nextcloud hu.irl.cameractrls; do
+        grep -qF "[Flatpak Preinstall ${app_id}]" manifests/flatpaks.preinstall
+    done
+    ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' manifests/flatpaks.preinstall
+    ! grep -qF '[Flatpak Preinstall com.vscodium.codium]' manifests/flatpaks.preinstall
+    for package in fuse fuse-libs git micro nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
+        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
+    done
+    grep -qF 'dnf5 -y install "${base_packages[@]}"' build_files/build.sh
+    grep -qF 'for command in micro nm-connection-editor wg' build_files/build.sh
+    grep -qF 'test -f /usr/share/applications/nm-connection-editor.desktop' build_files/build.sh
     test ! -e build_files/install-nextcloud-appimage.sh
     ! grep -qF 'install-nextcloud-appimage' build_files/build.sh
     ! grep -qF '/usr/bin/nextcloud' build_files/build.sh
-    for package in fuse fuse-libs; do
-        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
-    done
+
+    # Bitwarden remains common rather than belonging to a role or hardware profile.
     test ! -e system_files/usr/libexec/purplefin/install-bitwarden-cli-native
     test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-layer
     test -x system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/05-bitwarden-desktop-flatpak-migration
@@ -88,12 +157,70 @@ check:
     grep -qF 'rpm -q purplefin-bitwarden-cli' build_files/build.sh
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
     grep -qF '### Migrating Bitwarden from the layered RPM' README.md
-    for package in micro nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
-        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
+
+    # Support owns Espanso, RustConn, and PAM U2F.
+    support_role=build_files/profiles/roles/support.sh
+    support_root=profile_files/roles/support
+    grep -qF 'purplefin_apply_role_overlay support' "${support_role}"
+    grep -qF 'install espanso-wayland' "${support_role}"
+    grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' "${support_role}"
+    grep -qF 'systemctl --global enable espanso.service' "${support_role}"
+    for package in pam-u2f pamu2fcfg libfido2 opensc pcsc-lite yubikey-manager; do
+        grep -qE "^[[:space:]]*${package}$" "${support_role}"
     done
-    grep -qF 'dnf5 -y install "${base_packages[@]}"' build_files/build.sh
-    grep -qF 'for command in micro nm-connection-editor wg' build_files/build.sh
-    grep -qF 'test -f /usr/share/applications/nm-connection-editor.desktop' build_files/build.sh
+    grep -qF 'purplefin_authselect_request with-pam-u2f' "${support_role}"
+    grep -qF 'systemctl enable pcscd.socket' "${support_role}"
+    test -f "${support_root}/manifests/flatpaks.preinstall"
+    grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${support_root}/manifests/flatpaks.preinstall"
+    ! grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${support_root}/manifests/flatpaks.preinstall"
+    test -f "${support_root}/system_files/usr/lib/systemd/user/espanso.service"
+    espanso_unit="${support_root}/system_files/usr/lib/systemd/user/espanso.service"
+    grep -qxF 'After=graphical-session.target' "${espanso_unit}"
+    grep -qxF 'PartOf=graphical-session.target' "${espanso_unit}"
+    grep -qxF 'ExecStart=/usr/bin/espanso launcher' "${espanso_unit}"
+    grep -qxF 'WantedBy=graphical-session.target' "${espanso_unit}"
+    ! grep -qxF 'WantedBy=default.target' "${espanso_unit}"
+    test ! -e system_files/usr/lib/systemd/user/espanso.service
+    ! rg -q 'pam-u2f|pamu2fcfg|pcscd' build_files/profiles/dell-xps-9350-intel.sh build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
+
+    # Development owns Ghostty, infrastructure tools, and VSCodium.
+    development_role=build_files/profiles/roles/development.sh
+    development_root=profile_files/roles/development
+    grep -qF 'purplefin_apply_role_overlay development' "${development_role}"
+    grep -qF 'dnf5 -y install ghostty' "${development_role}"
+    for package in ansible openbao opentofu packer; do
+        grep -qE "^[[:space:]]*${package}$" "${development_role}"
+    done
+    grep -qF 'dnf5 -y install "${infrastructure_packages[@]}"' "${development_role}"
+    grep -qF 'for command in ansible bao packer tofu' "${development_role}"
+    grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${development_root}/manifests/flatpaks.preinstall"
+    ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${development_root}/manifests/flatpaks.preinstall"
+    ghostty_skel="${development_root}/system_files/etc/skel/.config/ghostty/config.ghostty"
+    ghostty_shared="${development_root}/system_files/usr/share/purplefin/ghostty/config.ghostty"
+    test -f "${ghostty_skel}"
+    test -f "${ghostty_shared}"
+    cmp -s "${ghostty_skel}" "${ghostty_shared}"
+    grep -qx 'copy-on-select = clipboard' "${ghostty_skel}"
+    grep -qx 'right-click-action = paste' "${ghostty_skel}"
+    test -x "${development_root}/system_files/usr/libexec/purplefin/install-ghostty-defaults"
+    test -f "${development_root}/system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service"
+    hashicorp_repo="${development_root}/system_files/etc/yum.repos.d/hashicorp.repo"
+    test -f "${hashicorp_repo}"
+    grep -qx '\[hashicorp\]' "${hashicorp_repo}"
+    grep -qx 'baseurl=https://rpm.releases.hashicorp.com/fedora/\$releasever/\$basearch/stable' "${hashicorp_repo}"
+    grep -qx 'gpgkey=https://rpm.releases.hashicorp.com/gpg' "${hashicorp_repo}"
+    test -f "${development_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
+    grep -qx 'd /var/lib/openbao 0700 openbao openbao - -' "${development_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
+    test ! -e system_files/etc/skel/.config/ghostty/config.ghostty
+    test ! -e system_files/etc/yum.repos.d/hashicorp.repo
+    grep -qx 'excludepkgs=bitwarden\*' system_files/etc/yum.repos.d/terra.repo
+
+    grep -qF '/tmp/purplefin-build/profiles/roles/support.sh' build_files/profiles/roles/workstation.sh
+    grep -qF '/tmp/purplefin-build/profiles/roles/development.sh' build_files/profiles/roles/workstation.sh
+    grep -qF 'cp -a "${system_root}/." /' build_files/profiles/lib/role-common.sh
+    grep -qF '/usr/share/flatpak/preinstall.d/purplefin-${role}.preinstall' build_files/profiles/lib/role-common.sh
+
+    # Common removal and branding policy remains global.
     grep -qF 'systemctl disable tailscaled.service' build_files/build.sh
     grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/build.sh
     grep -qF 'rm -f /etc/yum.repos.d/tailscale.repo' build_files/build.sh
@@ -101,35 +228,6 @@ check:
     grep -qF 'rm -f /usr/share/fish/completions/tailscale.fish' build_files/build.sh
     grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/build.sh
     grep -qF "sed -i '/^Tailscale is included,/d'" build_files/build.sh
-    grep -qF 'install espanso-wayland' build_files/build.sh
-    grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' build_files/build.sh
-    test -f system_files/usr/lib/systemd/user/espanso.service
-    grep -qxF 'ExecStart=/usr/bin/espanso launcher' system_files/usr/lib/systemd/user/espanso.service
-    grep -qxF 'WantedBy=default.target' system_files/usr/lib/systemd/user/espanso.service
-    test -L system_files/etc/systemd/user/default.target.wants/espanso.service
-    test "$(readlink system_files/etc/systemd/user/default.target.wants/espanso.service)" = '../../../../usr/lib/systemd/user/espanso.service'
-    test -f system_files/etc/skel/.config/ghostty/config.ghostty
-    test -f system_files/usr/share/purplefin/ghostty/config.ghostty
-    cmp -s system_files/etc/skel/.config/ghostty/config.ghostty system_files/usr/share/purplefin/ghostty/config.ghostty
-    test -x system_files/usr/libexec/purplefin/install-ghostty-defaults
-    test -f system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service
-    test -L system_files/etc/systemd/user/default.target.wants/purplefin-ghostty-defaults.service
-    grep -qx 'copy-on-select = clipboard' system_files/etc/skel/.config/ghostty/config.ghostty
-    grep -qx 'right-click-action = paste' system_files/etc/skel/.config/ghostty/config.ghostty
-    test ! -e system_files/etc/xdg/xdg-terminals.list
-    test ! -e system_files/etc/xdg/gnome-xdg-terminals.list
-    grep -qx 'excludepkgs=1password\*,bitwarden\*' system_files/etc/yum.repos.d/terra.repo
-    test -f system_files/etc/yum.repos.d/hashicorp.repo
-    grep -qx '\[hashicorp\]' system_files/etc/yum.repos.d/hashicorp.repo
-    grep -qx 'baseurl=https://rpm.releases.hashicorp.com/fedora/\$releasever/\$basearch/stable' system_files/etc/yum.repos.d/hashicorp.repo
-    grep -qx 'gpgkey=https://rpm.releases.hashicorp.com/gpg' system_files/etc/yum.repos.d/hashicorp.repo
-    for package in ansible openbao opentofu packer; do
-        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
-    done
-    grep -qF 'dnf5 -y install "${infrastructure_packages[@]}"' build_files/build.sh
-    grep -qF 'for command in ansible bao packer tofu' build_files/build.sh
-    test -f system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf
-    grep -qx 'd /var/lib/openbao 0700 openbao openbao - -' system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf
     test -f system_files/usr/share/plymouth/themes/spinner/watermark.png
     test -f system_files/usr/share/plymouth/themes/spinner/silverblue-watermark.png
     test -f system_files/usr/share/pixmaps/fedora-gdm-logo.png
@@ -154,6 +252,15 @@ check:
     test "$(build_files/select-ostree-linux.sh dell-xps-9350-intel 7.1.3-200.fc44.x86_64)" = '7.1.3-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh dell-xps-9350-intel 7.2.0-200.fc44.x86_64)" = '7.2.0-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh generic-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
+    test "$(build_files/select-ostree-linux.sh desktop-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
+    test "$(build_files/select-ostree-linux.sh lenovo-generic 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
+    grep -qF 'BUILD_ROLE=' .github/workflows/build.yml
+    grep -qF 'matrix.role' .github/workflows/build.yml
+    grep -qF 'BUILD_PROFILE=' .github/workflows/build.yml
+    grep -qF 'matrix.hardware' .github/workflows/build.yml
+    for tag in generic-x86_64 latest dell-xps-9350-intel base-generic-x86_64 support-dell-xps-9350-intel support-lenovo-generic development-desktop-x86_64; do
+        grep -qw "${tag}" .github/workflows/build.yml
+    done
     grep -qF 'PURPLEFIN_OSTREE_LINUX=' .github/workflows/build.yml
     grep -qF 'ostree.linux=' .github/workflows/build.yml
     grep -qF 'steps.kernel.outputs.release' .github/workflows/build.yml
@@ -169,8 +276,6 @@ check:
     test -z "$(find system_files profile_files -iname '*librepods*' -print -quit)"
     ! rg -qi 'librepods' README.md build_files/profiles
     test -x build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
-    grep -qF 'copy_profile_file "etc/yum.repos.d/1password.repo"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
-    grep -qF 'copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'copy_profile_tree "usr/share/purplefin/refind"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'install_mainline_7_1_kernel' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     grep -qF 'kernel_default_evr="7.1.2-355.vanilla.fc44"' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
@@ -180,6 +285,8 @@ check:
     for profile_script in build_files/profiles/dell-xps-9350-intel.sh build_files/profiles/dell-xps-9350-intel-no-ipu7.sh; do
         grep -qF 'source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh' "${profile_script}"
         grep -qF 'purplefin_configure_dell_xps_9350_common' "${profile_script}"
+        grep -qF 'dnf5 -y install fprintd libfprint' "${profile_script}"
+        grep -qF 'purplefin_authselect_request with-fingerprint' "${profile_script}"
     done
     for common_path in \
         usr/lib/purplefin/dell-xps-9350-battery.conf \
@@ -196,11 +303,7 @@ check:
     done
     ! grep -Eq 'copy_profile_(file|tree) ".*(dell-ipu7|ipu7-|v4l2loopback|libcamera|pipewire|intel_cvs|intel_ipu7)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
     ! grep -Eq '20-dell-ipu7|30-dell-ipu7|40-dell-ipu7|dell-ipu7-setup|dell-ipu7-patch|usr/libexec/purplefin/lib/dell-ipu7|purplefin-dell-ipu7-(psys|v4l2loopback)' build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
-    test ! -e system_files/etc/yum.repos.d/1password.repo
-    test ! -e system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
-    test -f profile_files/dell-xps-9350-intel/system_files/etc/yum.repos.d/1password.repo
     test ! -e profile_files/dell-xps-9350-intel/system_files/etc/plymouth
-    test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
     xps_profile_root=profile_files/dell-xps-9350-intel/system_files
     xps_common_profile=build_files/profiles/lib/dell-xps-9350-common.sh
@@ -460,34 +563,59 @@ check:
     test ! -e "${refind_tmp}/EFI/refind/themes/rEFInd-Regular-Dark/icons/os_ubuntu.png"
     test "$(grep -c '^include themes/rEFInd-Regular-Dark/theme.conf$' "${refind_tmp}/EFI/refind/refind.conf")" -eq 1
 
-_build profile tag:
+_build role hardware tag:
     #!/usr/bin/env bash
     set -euo pipefail
     base_image='ghcr.io/ublue-os/bluefin:stable'
     base_kernel="$(skopeo inspect --retry-times 3 "docker://${base_image}" | jq -er '.Labels["ostree.linux"]')"
-    target_kernel="$(build_files/select-ostree-linux.sh '{{profile}}' "${base_kernel}")"
+    target_kernel="$(build_files/select-ostree-linux.sh '{{ hardware }}' "${base_kernel}")"
     podman build \
         --pull=missing \
-        --build-arg BUILD_PROFILE='{{profile}}' \
+        --build-arg BUILD_ROLE='{{ role }}' \
+        --build-arg BUILD_PROFILE='{{ hardware }}' \
         --build-arg PURPLEFIN_OSTREE_LINUX="${target_kernel}" \
         --label "ostree.linux=${target_kernel}" \
-        --tag '{{tag}}' \
+        --tag '{{ tag }}' \
         .
 
 build-generic:
-    just _build generic-x86_64 {{image}}:generic-x86_64
+    just _build workstation generic-x86_64 {{ image }}:generic-x86_64
 
 build-dell:
-    just _build dell-xps-9350-intel {{image}}:dell-xps-9350-intel
+    just _build workstation dell-xps-9350-intel {{ image }}:dell-xps-9350-intel
 
 build-dell-no-ipu7:
-    just _build dell-xps-9350-intel-no-ipu7 {{image}}:dell-xps-9350-intel-no-ipu7
+    just _build workstation dell-xps-9350-intel-no-ipu7 {{ image }}:dell-xps-9350-intel-no-ipu7
+
+build-base-generic:
+    just _build base generic-x86_64 {{ image }}:base-generic-x86_64
+
+build-support-dell:
+    just _build support dell-xps-9350-intel {{ image }}:support-dell-xps-9350-intel
+
+build-support-lenovo:
+    just _build support lenovo-generic {{ image }}:support-lenovo-generic
+
+build-development-desktop:
+    just _build development desktop-x86_64 {{ image }}:development-desktop-x86_64
 
 lint-generic:
-    podman run --rm --entrypoint bootc {{image}}:generic-x86_64 container lint
+    podman run --rm --entrypoint bootc {{ image }}:generic-x86_64 container lint
 
 lint-dell:
-    podman run --rm --entrypoint bootc {{image}}:dell-xps-9350-intel container lint
+    podman run --rm --entrypoint bootc {{ image }}:dell-xps-9350-intel container lint
 
 lint-dell-no-ipu7:
-    podman run --rm --entrypoint bootc {{image}}:dell-xps-9350-intel-no-ipu7 container lint
+    podman run --rm --entrypoint bootc {{ image }}:dell-xps-9350-intel-no-ipu7 container lint
+
+lint-base-generic:
+    podman run --rm --entrypoint bootc {{ image }}:base-generic-x86_64 container lint
+
+lint-support-dell:
+    podman run --rm --entrypoint bootc {{ image }}:support-dell-xps-9350-intel container lint
+
+lint-support-lenovo:
+    podman run --rm --entrypoint bootc {{ image }}:support-lenovo-generic container lint
+
+lint-development-desktop:
+    podman run --rm --entrypoint bootc {{ image }}:development-desktop-x86_64 container lint

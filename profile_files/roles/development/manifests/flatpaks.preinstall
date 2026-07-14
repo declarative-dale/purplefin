@@ -1,0 +1,3 @@
+[Flatpak Preinstall com.vscodium.codium]
+Branch=stable
+IsRuntime=false

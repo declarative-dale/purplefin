@@ -1,6 +1,8 @@
 [Unit]
 Description=Espanso text expander
 Documentation=https://espanso.org/docs/
+After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 ExecStart=/usr/bin/espanso launcher
@@ -8,4 +10,4 @@ Restart=on-failure
 RestartSec=3
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

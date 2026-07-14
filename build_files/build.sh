@@ -2,30 +2,47 @@
 set -euo pipefail
 
 profile="${1:-${BUILD_PROFILE:-generic-x86_64}}"
+role="${2:-${BUILD_ROLE:-workstation}}"
 profile_script="/tmp/purplefin-build/profiles/${profile}.sh"
+role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"
+authselect_lib="/tmp/purplefin-build/profiles/lib/authselect-features.sh"
 
 if [[ ! "${profile}" =~ ^[a-z0-9._-]+$ ]]; then
-	echo "Invalid build profile: ${profile}" >&2
+	echo "Invalid hardware profile: ${profile}" >&2
 	exit 2
 fi
 
 if [[ ! -x "${profile_script}" ]]; then
-	echo "Unknown build profile: ${profile}" >&2
-	echo "Available profiles:" >&2
+	echo "Unknown hardware profile: ${profile}" >&2
+	echo "Available hardware profiles:" >&2
 	find /tmp/purplefin-build/profiles -maxdepth 1 -type f -name '*.sh' -printf '  %f\n' | sed 's/\.sh$//' >&2
 	exit 2
 fi
 
+if [[ ! "${role}" =~ ^[a-z0-9._-]+$ ]]; then
+	echo "Invalid build role: ${role}" >&2
+	exit 2
+fi
+
+if [[ ! -x "${role_script}" ]]; then
+	echo "Unknown build role: ${role}" >&2
+	echo "Available build roles:" >&2
+	find /tmp/purplefin-build/profiles/roles -maxdepth 1 -type f -name '*.sh' -printf '  %f\n' | sed 's/\.sh$//' >&2
+	exit 2
+fi
+
+# shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
+source "${authselect_lib}"
+purplefin_authselect_reset
+
 install -d /usr/share/purplefin
 printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
+printf '%s\n' "${profile}" > /usr/share/purplefin/build-hardware
+printf '%s\n' "${role}" > /usr/share/purplefin/build-role
 
 chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
-chmod 0755 /usr/libexec/purplefin/install-ghostty-defaults
 chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
 chmod 0755 /usr/libexec/purplefin/update-bitwarden-flatpak
-if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
-	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
-fi
 
 echo ":: Removing inherited Tailscale"
 systemctl disable tailscaled.service >/dev/null 2>&1 || true
@@ -73,12 +90,11 @@ if grep -q '^Tailscale is included,' /usr/share/ublue-os/motd/tips/10-tips.md 2>
 	exit 1
 fi
 
-echo ":: Installing common Purplefin RPM overlays"
-dnf5 -y install ghostty
-dnf5 -y --setopt=install_weak_deps=False install espanso-wayland
+echo ":: Installing base Purplefin RPM overlays"
 base_packages=(
 	fuse
 	fuse-libs
+	git
 	micro
 	nm-connection-editor
 	nm-connection-editor-desktop
@@ -89,6 +105,7 @@ dnf5 -y install "${base_packages[@]}"
 for package in "${base_packages[@]}"; do
 	rpm -q "${package}"
 done
+command -v git >/dev/null
 for command in micro nm-connection-editor wg; do
 	command -v "${command}" >/dev/null
 done
@@ -99,40 +116,29 @@ rpm -q purplefin-bitwarden-cli
 test "$(rpm -qf --qf '%{NAME}\n' /usr/bin/bw)" = "purplefin-bitwarden-cli"
 command -v bw >/dev/null
 
-infrastructure_packages=(
-	ansible
-	openbao
-	opentofu
-	packer
-)
-dnf5 -y install "${infrastructure_packages[@]}"
-
-for package in "${infrastructure_packages[@]}"; do
-	rpm -q "${package}"
-done
-for command in ansible bao packer tofu; do
-	command -v "${command}" >/dev/null
-done
-
-if command -v espanso >/dev/null 2>&1 && command -v setcap >/dev/null 2>&1; then
-	echo ":: Granting Espanso Wayland input capability"
-	setcap "cap_dac_override+p" "$(command -v espanso)"
-fi
-
 echo ":: Enabling common Purplefin services"
 systemctl enable flatpak-nuke-fedora.service
 systemctl enable flatpak-preinstall.service
 systemctl enable purplefin-brew-bundle.service
 systemctl enable purplefin-bitwarden-flatpak-update.timer
 
-echo ":: Applying Purplefin build profile: ${profile}"
+echo ":: Applying Purplefin build role: ${role}"
+"${role_script}"
+
+echo ":: Applying Purplefin hardware profile: ${profile}"
 "${profile_script}"
+
+purplefin_authselect_finalize
+
+if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
+	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
+fi
 
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]] && find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -perm /111 -print -quit | grep -q .; then
 	echo ":: Enabling Purplefin rpm-ostree first-boot tasks"
 	systemctl enable purplefin-firstboot-rpm-ostree.service
 else
-	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for profile ${profile}"
+	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for role ${role} and hardware ${profile}"
 fi
 
 if [[ -z "${PURPLEFIN_OSTREE_LINUX:-}" ]]; then

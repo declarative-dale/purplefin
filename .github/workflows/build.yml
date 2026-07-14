@@ -18,16 +18,30 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.profile }}
+    name: Build ${{ matrix.role }} / ${{ matrix.hardware }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - profile: generic-x86_64
+          - role: workstation
+            hardware: generic-x86_64
             tags: generic-x86_64 latest
-          - profile: dell-xps-9350-intel
+          - role: workstation
+            hardware: dell-xps-9350-intel
             tags: dell-xps-9350-intel
+          - role: base
+            hardware: generic-x86_64
+            tags: base-generic-x86_64
+          - role: support
+            hardware: dell-xps-9350-intel
+            tags: support-dell-xps-9350-intel
+          - role: support
+            hardware: lenovo-generic
+            tags: support-lenovo-generic
+          - role: development
+            hardware: desktop-x86_64
+            tags: development-desktop-x86_64
 
     steps:
       - name: Checkout
@@ -38,7 +52,7 @@ jobs:
         shell: bash
         run: |
           base_kernel="$(skopeo inspect --retry-times 3 docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
-          target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.profile }}' "${base_kernel}")"
+          target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.hardware }}' "${base_kernel}")"
           echo "release=${target_kernel}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
@@ -49,7 +63,8 @@ jobs:
           tags: ${{ matrix.tags }}
           containerfiles: ./Containerfile
           build-args: |
-            BUILD_PROFILE=${{ matrix.profile }}
+            BUILD_ROLE=${{ matrix.role }}
+            BUILD_PROFILE=${{ matrix.hardware }}
             BASE_IMAGE=ghcr.io/ublue-os/bluefin
             BASE_TAG=stable
             PURPLEFIN_OSTREE_LINUX=${{ steps.kernel.outputs.release }}

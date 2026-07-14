@@ -12,18 +12,48 @@ The image is built from this repository and published to:
 ghcr.io/declarative-dale/purplefin
 ```
 
-## Profiles
+## Build-Time Composition
 
-Build-time profiles keep generic public image customizations separate from
-laptop-specific hardware behavior.
+Purplefin follows a base → role → hardware build pipeline and emits one final
+bootc image:
 
-| Profile | Purpose |
+- `BUILD_ROLE` selects the software workload.
+- `BUILD_PROFILE` selects the hardware overlay. The historical variable name is
+  retained for compatibility, but it now means hardware rather than the whole
+  image personality.
+
+| Role | Workload |
 | --- | --- |
-| `generic-x86_64` | Common public x86_64 image with Purplefin packages, Flatpak preinstalls, and Homebrew bundle setup. |
-| `dell-xps-9350-intel` | Dell XPS 9350 Intel profile with battery-longevity, laptop-performance, internal-panel, ambient-brightness, Goodix fingerprint, 1Password, rEFInd, Dell IPU7 camera, and optional PAM U2F policies. |
-| `dell-xps-9350-intel-no-ipu7` | Dell XPS 9350 Intel test profile with the same pinned mainline `7.1.x` kernel and non-camera laptop policies as the Dell profile, but without the IPU7 module, activation rules, or camera userspace. |
+| `base` | Shared image foundation, including Git and Micro. |
+| `support` | Base plus Espanso, RustConn, and optional PAM U2F policy. |
+| `development` | Base plus Ghostty, VSCodium, Ansible, Packer, OpenTofu, and OpenBao. |
+| `workstation` | Base plus both support and development, preserving the complete legacy payload. |
 
-The default profile is `generic-x86_64`.
+| Hardware profile | Overlay |
+| --- | --- |
+| `generic-x86_64` | Generic x86-64 hardware with no vendor-specific overlay. |
+| `desktop-x86_64` | Neutral generic x86-64 desktop scaffold for future hardware policy. |
+| `lenovo-generic` | Neutral Lenovo scaffold for future hardware policy. |
+| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, fingerprint support, rEFInd, and the IPU7 camera stack. |
+| `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera policies and pinned mainline kernel, but no IPU7 camera integration. |
+
+The defaults remain `workstation` and `generic-x86_64`. The legacy
+`generic-x86_64`, `latest`, and `dell-xps-9350-intel` tags use the workstation
+role and preserve their existing payloads. Roles and hardware profiles are
+build inputs, not packages or layers selected by the installer. Each supported
+pair is precomposed and published as one complete OCI image; `bootc install`,
+`bootc switch`, and subsequent upgrades track that single final tag.
+
+The build workflow publishes these representative combinations:
+
+| Role | Hardware | Image tag |
+| --- | --- | --- |
+| `workstation` | `generic-x86_64` | `generic-x86_64` and `latest` |
+| `workstation` | `dell-xps-9350-intel` | `dell-xps-9350-intel` |
+| `base` | `generic-x86_64` | `base-generic-x86_64` |
+| `support` | `dell-xps-9350-intel` | `support-dell-xps-9350-intel` |
+| `support` | `lenovo-generic` | `support-lenovo-generic` |
+| `development` | `desktop-x86_64` | `development-desktop-x86_64` |
 
 ## Build Locally
 
@@ -31,7 +61,15 @@ The default profile is `generic-x86_64`.
 just build-generic
 just build-dell
 just build-dell-no-ipu7
+just build-base-generic
+just build-support-dell
+just build-support-lenovo
+just build-development-desktop
 ```
+
+The first three recipes are compatibility entry points and build the
+`workstation` role. The remaining recipes exercise representative role and
+hardware combinations.
 
 The `just` targets inspect Bluefin's `ostree.linux` label and write the matching
 kernel label into the derived image. For an equivalent direct build, resolve
@@ -41,6 +79,7 @@ that value first:
 base_kernel="$(skopeo inspect docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
 target_kernel="$(build_files/select-ostree-linux.sh dell-xps-9350-intel "${base_kernel}")"
 podman build \
+  --build-arg BUILD_ROLE=workstation \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_OSTREE_LINUX="${target_kernel}" \
   --label "ostree.linux=${target_kernel}" \
@@ -52,6 +91,7 @@ The Dell profile also accepts build-time kernel canary arguments:
 
 ```bash
 podman build \
+  --build-arg BUILD_ROLE=workstation \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_DELL_IPU7_KERNEL_EVR=7.1.2-355.vanilla.fc44 \
   --build-arg PURPLEFIN_OSTREE_LINUX=7.1.2-355.vanilla.fc44.x86_64 \
@@ -65,43 +105,28 @@ Its neutral canary arguments are
 `PURPLEFIN_DELL_MAINLINE_KERNEL_EVR` and
 `PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED`.
 
-## Switch To The Image
+## Switch To An Image
 
-Generic profile:
+Select the tag containing the role and hardware you want. For example:
 
 ```bash
 run0 bootc switch ghcr.io/declarative-dale/purplefin:generic-x86_64
+run0 bootc switch ghcr.io/declarative-dale/purplefin:support-dell-xps-9350-intel
+run0 bootc switch ghcr.io/declarative-dale/purplefin:development-desktop-x86_64
 ```
 
-Dell XPS 9350 Intel profile:
+Reboot after switching. Switching changes the complete tracked image; bootc
+does not combine a role tag with a separate hardware tag at installation time.
 
-```bash
-run0 bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel
-```
-
-Dell XPS 9350 Intel no-IPU7 test profile:
-
-```bash
-run0 bootc switch ghcr.io/declarative-dale/purplefin:dell-xps-9350-intel-no-ipu7
-```
-
-Reboot after switching.
-
-The `latest` tag tracks the generic profile. Use the `dell-xps-9350-intel`
-tag for the full Dell IPU7 profile or `dell-xps-9350-intel-no-ipu7` for the
-Dell no-camera test profile. The full Dell camera profile uses the pinned
+The `latest` tag tracks the generic workstation image. Use the
+`dell-xps-9350-intel` tag for the full workstation plus Dell IPU7 image. The
+local `build-dell-no-ipu7` compatibility recipe produces the Dell no-camera
+test image. The full Dell camera profile uses the pinned
 7.1.2 fallback only while Bluefin's kernel is older than 7.1.2, then follows
-Bluefin's kernel. Every profile bakes in Packer, Ansible, OpenTofu, and OpenBao;
-their commands are `packer`, `ansible`, `tofu`, and `bao`, respectively. The
-base image also bakes Bitwarden's official native `bw` CLI inside a
-Purplefin-built RPM, Fedora's `micro` terminal editor and `wireguard-tools`, and
-a launchable NetworkManager connection editor for the preferred native
-WireGuard UI. Every profile preinstalls the Nextcloud desktop client and
-Cameractrls from Flathub. Gear Lever remains preinstalled for installing,
-launching, updating, and organizing user-provided AppImages, and Fedora's FUSE
-2 runtime remains available for direct AppImage execution. Inherited Tailscale
-packages, services,
-repositories, setup hooks, and user-facing tips are removed from every profile.
+Bluefin's kernel. Development and workstation images provide `packer`,
+`ansible`, `tofu`, and `bao`. The base role provides Git and Micro. Inherited
+Tailscale packages, services, repositories, setup hooks, and user-facing tips
+are removed from every composition.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
 reintroduce the desktop RPM after migration to Flatpak.
 
@@ -113,9 +138,6 @@ Purplefin-built RPM in the bootc image: its official versioned archive and
 GitHub-published SHA-256 digest are pinned in `build_files/bitwarden-cli.env`.
 A daily GitHub workflow checks for a new CLI release and opens a pull request;
 merging that update builds the version into the next Purplefin deployment.
-Both Dell profiles bake in `1password-cli`; the 1Password desktop RPM is
-layered by a first-boot rpm-ostree task and becomes available after the reboot
-into that staged deployment.
 
 To request immediate update checks instead of waiting for the timers and
 scheduled workflow, use:
@@ -366,36 +388,33 @@ non-working IPU7 inputs.
 
 ## What Is Tracked
 
-- Base image selection and build profile logic.
-- A centralized first-boot rpm-ostree runner with ordered task scripts and `/var/lib/purplefin/firstboot/*.done` markers. It stops after a task stages a deployment so later rpm-ostree tasks run after the next reboot instead of replacing earlier queued changes.
-- System Flatpak preinstall manifest generated from this laptop, including the
-  verified Bitwarden desktop package and its twice-daily update timer.
-- Homebrew `Brewfile` generated from this laptop.
-- Image-baked Packer, Ansible, OpenTofu, and OpenBao tooling for every profile.
-- Bitwarden's official native CLI payload under `/usr/bin/bw`, wrapped without
-  modification in a Purplefin-built RPM from a pinned versioned archive and
-  SHA-256 digest, plus a daily workflow that proposes CLI release updates.
-- A one-time first-boot migration that removes the legacy Bitwarden desktop RPM
-  layer after the verified Flatpak replacement is deployed.
-- Fedora `wireguard-tools` and the launchable NetworkManager connection editor
-  as the native WireGuard CLI and GUI for every profile.
-- Fedora's `micro` RPM as the terminal text editor available in every profile.
-- The Terra Espanso Wayland RPM with its temporary input-device capability and
-  an image-shipped systemd user service enabled for desktop users.
-- Nextcloud Desktop Client and Cameractrls as base Flatpaks inherited by every
-  profile, plus Gear Lever and Fedora's FUSE 2 runtime for user-managed
-  AppImages and application-menu integration.
-- Removal of inherited Tailscale packages, enabled services, and RPM repository
-  configuration from every profile.
-- A first-boot, idempotent Homebrew bundle service.
-- Vates planet boot, Plymouth, GDM login, and legacy Bluefin logo-path branding over the inherited Bluefin/Fedora assets.
-- Dell XPS 9350 Intel 1Password RPM repo plus baked `1password-cli`.
-- Dell XPS 9350 Intel first-boot rpm-ostree task that layers the 1Password desktop RPM on installed systems. The desktop RPM writes under `/opt`, which is supported by rpm-ostree layering on the target host but fails during direct bootc container package installation.
+- Base → role → hardware composition with the selected role and hardware written
+  into image metadata.
+- A shared base containing Git, Micro, Fedora's FUSE 2 runtime,
+  `wireguard-tools`, the NetworkManager connection editor, the complete Homebrew
+  `Brewfile`, branding, and common Flatpak preinstalls such as Bitwarden,
+  Nextcloud Desktop Client, Cameractrls, and Gear Lever.
+- Bitwarden's verified desktop Flatpak, update timer, polkit policy, legacy RPM
+  migration, and official native CLI wrapped in a Purplefin-built RPM from a
+  pinned archive and SHA-256 digest.
+- A centralized first-boot rpm-ostree runner with ordered tasks and
+  `/var/lib/purplefin/firstboot/*.done` markers. It stops when a task stages a
+  deployment so later tasks run after the required reboot.
+- The support role's graphical-session-bound Espanso service and capability,
+  RustConn Flatpak, and optional PAM U2F policy.
+- The development role's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
+  OpenTofu, OpenBao, HashiCorp repository, and OpenBao state-directory policy.
+- The workstation role as the supported union of the support and development
+  workloads used by the legacy tags.
+- Removal of inherited Tailscale packages, enabled services, RPM repository
+  configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
 - Dell XPS 9350 Intel DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD Performance profile, AC/battery internal-panel refresh policy, and one-time user-overridable ambient-brightness enablement.
-- Dell XPS 9350 Intel profile files for fingerprint auth.
+- Dell XPS 9350 Intel hardware files for fingerprint authentication.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
-- Dell XPS 9350 Intel optional PAM U2F support for security keys. User-specific key mappings are not included; register a key after switching with `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
+- Optional support-role PAM U2F support for security keys. User-specific key
+  mappings are not included; register a key after switching with
+  `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked
 

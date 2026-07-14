@@ -40,7 +40,7 @@ case "${profile}" in
 	dell-xps-9350-intel-no-ipu7)
 		printf '%s.%s\n' "${PURPLEFIN_DELL_MAINLINE_KERNEL_EVR:-${pinned_evr}}" "${base_arch}"
 		;;
-	generic-x86_64)
+	generic-x86_64|desktop-x86_64|lenovo-generic)
 		printf '%s\n' "${base_release}"
 		;;
 	*)

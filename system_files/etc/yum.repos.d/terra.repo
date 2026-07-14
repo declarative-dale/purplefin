@@ -9,4 +9,4 @@ gpgkey=https://repos.fyralabs.com/terra$releasever/key.asc
 enabled=1
 enabled_metadata=1
 metadata_expire=4h
-excludepkgs=1password*,bitwarden*
+excludepkgs=bitwarden*

@@ -8,6 +8,8 @@ kernel_default_evr="7.1.2-355.vanilla.fc44"
 
 # shellcheck source=/tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
 source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
+# shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
+source /tmp/purplefin-build/profiles/lib/authselect-features.sh
 
 kernel_runtime_packages=(
 	kernel
@@ -239,9 +241,6 @@ install_mainline_7_1_kernel() {
 }
 
 echo ":: Applying Dell XPS 9350 Intel no-camera test overlay"
-copy_profile_file "etc/yum.repos.d/1password.repo"
-copy_profile_file "usr/lib/sysusers.d/purplefin-onepassword-cli.conf"
-copy_profile_file "usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer"
 copy_profile_file "usr/libexec/purplefin/install-refind-theme"
 copy_profile_file "usr/lib/systemd/system/purplefin-refind-theme.service"
 copy_profile_tree "usr/share/purplefin/refind"
@@ -256,7 +255,6 @@ copy_profile_file "usr/share/purplefin/dell-xps-9350-panel.conf"
 copy_profile_file "usr/share/glib-2.0/schemas/zz9-purplefin-dell-xps-9350.gschema.override"
 copy_profile_file "etc/systemd/user/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service"
 
-chmod 0755 /usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
 chmod 0755 /usr/libexec/purplefin/install-refind-theme
 
 install_mainline_7_1_kernel
@@ -266,19 +264,6 @@ purplefin_configure_dell_xps_9350_common
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service
 
-echo ":: Ensuring 1Password CLI is present"
-dnf5 -y --disable-repo=terra install 1password-cli
-rpm -q 1password-cli
-command -v op >/dev/null
-
 echo ":: Ensuring fingerprint stack is present"
 dnf5 -y install fprintd libfprint
-
-echo ":: Ensuring security key stack is present"
-dnf5 -y install pam-u2f pamu2fcfg libfido2 opensc pcsc-lite yubikey-manager
-
-echo ":: Enabling fingerprint and optional U2F authentication through authselect"
-authselect select local with-silent-lastlog with-mdns4 with-fingerprint with-pam-u2f --force
-
-echo ":: Enabling smart card/security key socket"
-systemctl enable pcscd.socket
+purplefin_authselect_request with-fingerprint

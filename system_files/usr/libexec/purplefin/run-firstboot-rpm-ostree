@@ -14,11 +14,6 @@ if ! command -v rpm-ostree >/dev/null 2>&1; then
 	exit 0
 fi
 
-if [[ ! -d "${task_dir}" ]]; then
-	purplefin_firstboot_log "task directory ${task_dir} does not exist; nothing to do"
-	exit 0
-fi
-
 install -d -m 0755 "${marker_dir}"
 rm -f "${reboot_required_file}"
 
@@ -28,6 +23,23 @@ if purplefin_firstboot_pending_deployment_exists; then
 fi
 
 shopt -s nullglob
+markers=("${marker_dir}"/*.done)
+for marker in "${markers[@]}"; do
+	task_name="$(basename "${marker}" .done)"
+	task="${task_dir}/${task_name}"
+	if [[ -f "${task}" && -x "${task}" ]]; then
+		continue
+	fi
+
+	rm -f "${marker}"
+	purplefin_firstboot_log "removed stale marker for retired task ${task_name}"
+done
+
+if [[ ! -d "${task_dir}" ]]; then
+	purplefin_firstboot_log "task directory ${task_dir} does not exist; nothing to do"
+	exit 0
+fi
+
 tasks=("${task_dir}"/*)
 
 if ((${#tasks[@]} == 0)); then

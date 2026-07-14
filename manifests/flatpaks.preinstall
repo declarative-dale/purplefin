@@ -58,10 +58,6 @@ IsRuntime=false
 Branch=stable
 IsRuntime=false
 
-[Flatpak Preinstall io.github.totoshko88.RustConn]
-Branch=stable
-IsRuntime=false
-
 [Flatpak Preinstall io.github.zaedus.spider]
 Branch=stable
 IsRuntime=false
