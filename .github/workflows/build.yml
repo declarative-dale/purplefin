@@ -83,8 +83,15 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          install -d -m 0700 "${HOME}/.docker"
+          registry_auth_file="${HOME}/.docker/config.json"
           printf '%s' "${GHCR_TOKEN}" |
-            podman login "${REGISTRY}" --username "${GITHUB_ACTOR}" --password-stdin
+            podman login \
+              --authfile "${registry_auth_file}" \
+              "${REGISTRY}" \
+              --username "${GITHUB_ACTOR}" \
+              --password-stdin
+          echo "REGISTRY_AUTH_FILE=${registry_auth_file}" >> "${GITHUB_ENV}"
 
       - name: Push image
         if: github.event_name != 'pull_request'
@@ -114,4 +121,7 @@ jobs:
       - name: Log out of GHCR
         if: ${{ always() && github.event_name != 'pull_request' }}
         continue-on-error: true
-        run: podman logout "${REGISTRY}"
+        run: |
+          registry_auth_file="${REGISTRY_AUTH_FILE:-${HOME}/.docker/config.json}"
+          podman logout --authfile "${registry_auth_file}" "${REGISTRY}" || true
+          rm -f "${registry_auth_file}"

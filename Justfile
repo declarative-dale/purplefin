@@ -295,6 +295,7 @@ check:
     grep -qF 'buildah bud' .github/workflows/build.yml
     grep -qF 'podman login' .github/workflows/build.yml
     grep -qF 'podman push' .github/workflows/build.yml
+    grep -qF 'REGISTRY_AUTH_FILE=' .github/workflows/build.yml
     ! rg -q 'actions/checkout@v4|redhat-actions/(buildah-build|podman-login|push-to-registry)' .github/workflows
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
