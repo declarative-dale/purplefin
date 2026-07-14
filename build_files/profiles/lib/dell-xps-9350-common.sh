@@ -5,10 +5,11 @@ purplefin_configure_dell_xps_9350_common() {
 	local battery_service="purplefin-dell-xps-9350-battery.service"
 	local panel_service="purplefin-dell-xps-9350-panel.service"
 	local panel_wants="/etc/systemd/user/graphical-session.target.wants/${panel_service}"
+	local schema_dir="/usr/share/glib-2.0/schemas"
 	local tuned_ppd_conf="/etc/tuned/ppd.conf"
 	local tuned_profile="purplefin-dell-xps-9350-performance"
 	local tuned_profile_conf="/usr/lib/tuned/profiles/${tuned_profile}/tuned.conf"
-	local tuned_ppd_tmp command expected_setting
+	local schema_validation_dir tuned_ppd_tmp command expected_setting
 
 	for command in busctl gdctl gdbus gsettings glib-compile-schemas systemd-hwdb upower; do
 		command -v "${command}" >/dev/null 2>&1 || {
@@ -63,7 +64,15 @@ purplefin_configure_dell_xps_9350_common() {
 	echo ":: Configuring Dell XPS 9350 panel and ambient-brightness policy"
 	test -L "${panel_wants}"
 	test "$(readlink "${panel_wants}")" = '../../../../usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service'
-	glib-compile-schemas --strict /usr/share/glib-2.0/schemas
-	GSETTINGS_BACKEND=memory gsettings get \
+	schema_validation_dir="$(mktemp -d)"
+	install -m 0644 "${schema_dir}/org.gnome.settings-daemon.enums.xml" "${schema_validation_dir}/"
+	install -m 0644 "${schema_dir}/org.gnome.settings-daemon.plugins.power.gschema.xml" "${schema_validation_dir}/"
+	install -m 0644 "${schema_dir}/zz9-purplefin-dell-xps-9350.gschema.override" "${schema_validation_dir}/"
+	glib-compile-schemas --strict --dry-run "${schema_validation_dir}"
+	rm -rf "${schema_validation_dir}"
+	# The inherited Bluefin schema tree can contain stale Fedora override keys.
+	# Compile it normally so those unrelated keys are ignored rather than fatal.
+	glib-compile-schemas "${schema_dir}"
+	GSETTINGS_SCHEMA_DIR="${schema_dir}" GSETTINGS_BACKEND=memory gsettings get \
 		org.gnome.settings-daemon.plugins.power ambient-enabled | grep -qx true
 }

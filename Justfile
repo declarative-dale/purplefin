@@ -203,6 +203,7 @@ check:
     test -x profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/10-1password-desktop-layer
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
     xps_profile_root=profile_files/dell-xps-9350-intel/system_files
+    xps_common_profile=build_files/profiles/lib/dell-xps-9350-common.sh
     battery_helper="${xps_profile_root}/usr/libexec/purplefin/configure-dell-xps-9350-battery"
     battery_unit="${xps_profile_root}/usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service"
     battery_hwdb="${xps_profile_root}/usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb"
@@ -240,6 +241,9 @@ check:
     grep -qF 'AMBIENT_BRIGHTNESS_MIGRATION_ENABLED=true' "${panel_defaults}"
     grep -qF 'dell-xps-9350-ambient-brightness-v1' "${panel_helper}"
     grep -qx 'ambient-enabled=true' "${ambient_override}"
+    grep -qF 'glib-compile-schemas --strict --dry-run "${schema_validation_dir}"' "${xps_common_profile}"
+    grep -qF 'glib-compile-schemas "${schema_dir}"' "${xps_common_profile}"
+    ! grep -qF 'glib-compile-schemas --strict /usr/share/glib-2.0/schemas' "${xps_common_profile}"
     schema_tmp="${tmpdir}/xps-schemas"
     install -d "${schema_tmp}"
     cp /usr/share/glib-2.0/schemas/org.gnome.settings-daemon.enums.xml "${schema_tmp}/"
@@ -248,6 +252,34 @@ check:
     cp "${ambient_override}" "${schema_tmp}/"
     glib-compile-schemas --strict "${schema_tmp}"
     GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled | grep -qx true
+    printf '%s\n' \
+        '<?xml version="1.0" encoding="UTF-8"?>' \
+        '<schemalist>' \
+        '  <schema id="org.gnome.desktop.screensaver" path="/org/gnome/desktop/screensaver/">' \
+        '    <key name="picture-uri" type="s">' \
+        "      <default>''</default>" \
+        '    </key>' \
+        '  </schema>' \
+        '</schemalist>' > "${schema_tmp}/org.gnome.desktop.screensaver.gschema.xml"
+    printf '%s\n' \
+        '[org.gnome.desktop.screensaver]' \
+        "picture-uri='file:///usr/share/backgrounds/day.jpg'" \
+        "picture-uri-dark='file:///usr/share/backgrounds/night.jpg'" \
+        > "${schema_tmp}/10_org.gnome.desktop.screensaver.fedora.gschema.override"
+    schema_compile_log="${schema_tmp}/compile.log"
+    if LC_ALL=C glib-compile-schemas --strict "${schema_tmp}" 2>"${schema_compile_log}"; then
+        echo 'strict aggregate schema compilation unexpectedly accepted an inherited invalid key' >&2
+        exit 1
+    fi
+    grep -qF 'picture-uri-dark' "${schema_compile_log}"
+    grep -qF -- '--strict was specified' "${schema_compile_log}"
+    rm -f "${schema_tmp}/gschemas.compiled"
+    LC_ALL=C glib-compile-schemas "${schema_tmp}" 2>"${schema_compile_log}"
+    test -f "${schema_tmp}/gschemas.compiled"
+    grep -qF 'picture-uri-dark' "${schema_compile_log}"
+    grep -qF 'ignoring override for this key' "${schema_compile_log}"
+    GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled | grep -qx true
+    GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.desktop.screensaver picture-uri | grep -qx "'file:///usr/share/backgrounds/day.jpg'"
     tests/dell-xps-9350-policies.sh
     test -f docs/dell-xps-9350-secure-boot.md
     grep -qF 'cvs_provider=in-tree' docs/dell-xps-9350-secure-boot.md
