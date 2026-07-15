@@ -26,7 +26,7 @@ department and hardware profile:
 
 | Department | Workload |
 | --- | --- |
-| `base` | Shared image foundation, including Git and Micro. |
+| `base` | Shared image foundation, including Git, Micro, and QEMU disk-image tooling. |
 | `support` | Base plus the shared `devops` component, Espanso, and RustConn. |
 | `development` | Base plus the shared `devops` component. |
 
@@ -136,7 +136,8 @@ no-camera test image. The full Dell camera profile uses the pinned
 7.1.2 fallback only while Bluefin's kernel is older than 7.1.2, then follows
 Bluefin's kernel. The reusable `devops` component provides Ghostty, VSCodium,
 `packer`, `ansible`, `tofu`, and `bao`; both the support and development
-departments reference it. The base department provides Git and Micro.
+departments reference it. The base department provides Git, Micro, `qemu-img`,
+`qemu-tools`, and common QEMU image block backends.
 Inherited Tailscale packages, services, repositories, setup hooks, and
 user-facing tips are removed from every composition.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
@@ -403,9 +404,12 @@ non-working IPU7 inputs.
 - Common foundation → department → hardware composition with the selected
   department and hardware written into image metadata.
 - A shared base containing Git, Micro, Fedora's FUSE 2 runtime,
-  `wireguard-tools`, the NetworkManager connection editor, the complete Homebrew
+  `wireguard-tools`, the NetworkManager connection editor, `qemu-img`,
+  `qemu-tools`, common QEMU image block backends, the complete Homebrew
   `Brewfile`, branding, and common Flatpak preinstalls such as Bitwarden,
-  Nextcloud Desktop Client, Cameractrls, and Gear Lever.
+  Nextcloud Desktop Client, Cameractrls, and Gear Lever. Fedora's `qemu-img`
+  package supplies the core image tools; Fedora has no separate
+  `qemu-img-core` subpackage.
 - Bitwarden's verified desktop Flatpak, update timer, polkit policy, legacy RPM
   migration, and official native CLI wrapped in a Purplefin-built RPM from a
   pinned archive and SHA-256 digest.

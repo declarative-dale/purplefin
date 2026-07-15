@@ -103,13 +103,25 @@ base_packages=(
 	nm-connection-editor-desktop
 	wireguard-tools
 )
+base_qemu_packages=(
+	qemu-block-curl
+	qemu-block-dmg
+	qemu-block-iscsi
+	qemu-block-nfs
+	qemu-block-ssh
+	qemu-img
+	qemu-tools
+)
 dnf5 -y install "${base_packages[@]}"
+# Fedora packages the qemu-img core tools in qemu-img rather than a separate
+# qemu-img-core package. Avoid qemu-tools' optional SystemTap/kernel-devel stack.
+dnf5 -y --setopt=install_weak_deps=False install "${base_qemu_packages[@]}"
 
-for package in "${base_packages[@]}"; do
+for package in "${base_packages[@]}" "${base_qemu_packages[@]}"; do
 	rpm -q "${package}"
 done
 command -v git >/dev/null
-for command in micro nm-connection-editor wg; do
+for command in elf2dmp micro nm-connection-editor qemu-edid qemu-img qemu-io qemu-keymap qemu-nbd qemu-storage-daemon wg; do
 	command -v "${command}" >/dev/null
 done
 test -f /usr/share/applications/nm-connection-editor.desktop

@@ -115,8 +115,12 @@ check:
     for package in fuse fuse-libs git micro nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
         grep -qE "^[[:space:]]*${package}$" build_files/build.sh
     done
+    for package in qemu-block-curl qemu-block-dmg qemu-block-iscsi qemu-block-nfs qemu-block-ssh qemu-img qemu-tools; do
+        grep -qE "^[[:space:]]*${package}$" build_files/build.sh
+    done
     grep -qF 'dnf5 -y install "${base_packages[@]}"' build_files/build.sh
-    grep -qF 'for command in micro nm-connection-editor wg' build_files/build.sh
+    grep -qF 'dnf5 -y --setopt=install_weak_deps=False install "${base_qemu_packages[@]}"' build_files/build.sh
+    grep -qF 'for command in elf2dmp micro nm-connection-editor qemu-edid qemu-img qemu-io qemu-keymap qemu-nbd qemu-storage-daemon wg' build_files/build.sh
     grep -qF 'test -f /usr/share/applications/nm-connection-editor.desktop' build_files/build.sh
     test ! -e build_files/install-nextcloud-appimage.sh
     ! grep -qF 'install-nextcloud-appimage' build_files/build.sh
