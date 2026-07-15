@@ -39,13 +39,16 @@ department and hardware profile:
 | `generic-x86_64` | Generic x86-64 hardware with no vendor-specific overlay. |
 | `desktop-x86_64` | Neutral generic x86-64 desktop scaffold for future hardware policy. |
 | `lenovo-generic` | Neutral Lenovo scaffold for future hardware policy. |
-| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, rEFInd, and the IPU7 camera stack. |
-| `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera policies and pinned mainline kernel, but no IPU7 camera integration. |
+| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, lid-aware privilege authentication, rEFInd, and the IPU7 camera stack. |
+| `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera and lid-aware authentication policies and pinned mainline kernel, but no IPU7 camera integration. |
 
 Every hardware profile also applies the shared hardware-security baseline:
 fingerprint authentication, PAM U2F/FIDO2 support, YubiKey management, and
 smart-card services. User-specific fingerprint enrollments and security-key
 mappings remain local to each machine and are never built into an image.
+Both Dell profiles make `sudo` and polkit authentication lid-aware: an open lid
+uses the normal fingerprint-first stack, while a closed or indeterminate lid
+uses the local account password without attempting fingerprint authentication.
 
 The default pair is the `base` department with `generic-x86_64` hardware. The
 `generic-x86_64` and `latest` compatibility tags point to that same build. The
@@ -249,6 +252,35 @@ configure the account again if the existing AppImage settings are not imported.
 Both Dell profiles carry the non-camera policies below. Every hardware helper
 checks for `Dell Inc.` / `XPS 13 9350` DMI data before changing anything.
 
+### Lid-aware privilege authentication
+
+At the start of each new `sudo` or polkit authentication, the Dell policy reads
+systemd-logind's `LidClosed` property and cross-checks
+`/proc/acpi/button/lid/*/state` when the Dell ACPI state is available. A
+known-open lid uses the normal authselect-managed stack, including
+fingerprint-first authentication. Any reported closed or conflicting state—or
+the absence of an unambiguous open state—uses only the local Unix password.
+
+Because `run0` and `pkexec` authenticate through polkit, the same behavior
+applies to them and to graphical polkit prompts. Login and screen-unlock PAM
+services are unchanged. The lid is sampled when a new prompt begins; closing
+the lid does not replace an authentication method in a prompt that is already
+open, and cached sudo or polkit authorization may avoid a new prompt entirely.
+
+Inspect the state and force a fresh sudo prompt with:
+
+```bash
+busctl get-property \
+  org.freedesktop.login1 \
+  /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager \
+  LidClosed
+cat /proc/acpi/button/lid/*/state
+grep -H 'purplefin-dell-lid-auth' /etc/pam.d/{sudo,polkit-1}
+sudo -k
+sudo -v
+```
+
 ### Battery charging
 
 `purplefin-dell-xps-9350-battery.service` enables UPower's charge-threshold
@@ -425,7 +457,10 @@ non-working IPU7 inputs.
 - Removal of inherited Tailscale packages, enabled services, RPM repository
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
-- Dell XPS 9350 Intel DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD Performance profile, AC/battery internal-panel refresh policy, and one-time user-overridable ambient-brightness enablement.
+- Dell XPS 9350 Intel lid-aware password/fingerprint routing for sudo and
+  polkit, DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD
+  Performance profile, AC/battery internal-panel refresh policy, and one-time
+  user-overridable ambient-brightness enablement.
 - A shared hardware-security baseline for every hardware profile, including
   fingerprint authentication, PAM U2F/FIDO2, YubiKey management, and smart-card
   services.

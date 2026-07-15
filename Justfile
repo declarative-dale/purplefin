@@ -349,11 +349,16 @@ check:
         grep -qF 'purplefin_configure_dell_xps_9350_common' "${profile_script}"
     done
     for common_path in \
+        etc/pam.d/polkit-1 \
+        etc/pam.d/purplefin-dell-lid-auth \
+        etc/pam.d/purplefin-dell-password-auth \
+        etc/pam.d/sudo \
         usr/lib/purplefin/dell-xps-9350-battery.conf \
         usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb \
         usr/lib/tuned/profiles/purplefin-dell-xps-9350-performance/tuned.conf \
         usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service \
         usr/libexec/purplefin/configure-dell-xps-9350-battery \
+        usr/libexec/purplefin/dell-lid-is-open \
         usr/lib/systemd/user/purplefin-dell-xps-9350-panel.service \
         usr/libexec/purplefin/dell-xps-9350-panel-policy \
         usr/share/purplefin/dell-xps-9350-panel.conf \
@@ -367,6 +372,11 @@ check:
     test ! -e profile_files/dell-xps-9350-intel/system_files/usr/libexec/purplefin/firstboot-rpm-ostree.d/20-dell-ipu7-stable-kernel
     xps_profile_root=profile_files/dell-xps-9350-intel/system_files
     xps_common_profile=build_files/profiles/lib/dell-xps-9350-common.sh
+    lid_auth_helper="${xps_profile_root}/usr/libexec/purplefin/dell-lid-is-open"
+    lid_auth_stack="${xps_profile_root}/etc/pam.d/purplefin-dell-lid-auth"
+    password_auth_stack="${xps_profile_root}/etc/pam.d/purplefin-dell-password-auth"
+    sudo_auth_stack="${xps_profile_root}/etc/pam.d/sudo"
+    polkit_auth_stack="${xps_profile_root}/etc/pam.d/polkit-1"
     battery_helper="${xps_profile_root}/usr/libexec/purplefin/configure-dell-xps-9350-battery"
     battery_unit="${xps_profile_root}/usr/lib/systemd/system/purplefin-dell-xps-9350-battery.service"
     battery_hwdb="${xps_profile_root}/usr/lib/udev/hwdb.d/61-purplefin-dell-xps-9350-battery.hwdb"
@@ -376,6 +386,15 @@ check:
     panel_defaults="${xps_profile_root}/usr/share/purplefin/dell-xps-9350-panel.conf"
     panel_wants="${xps_profile_root}/etc/systemd/user/graphical-session.target.wants/purplefin-dell-xps-9350-panel.service"
     ambient_override="${xps_profile_root}/usr/share/glib-2.0/schemas/zz9-purplefin-dell-xps-9350.gschema.override"
+    test -x "${lid_auth_helper}"
+    test -f "${lid_auth_stack}"
+    test -f "${password_auth_stack}"
+    test -f "${sudo_auth_stack}"
+    test -f "${polkit_auth_stack}"
+    grep -qF 'LidClosed' "${lid_auth_helper}"
+    grep -qF '/proc/acpi/button/lid' "${lid_auth_helper}"
+    grep -qF 'lid-aware privilege authentication' "${xps_common_profile}"
+    ! rg -q 'purplefin-dell-lid-auth|dell-lid-is-open' system_files profile_files/roles profile_files/components
     test -x "${battery_helper}"
     test -f "${battery_unit}"
     test -f "${battery_hwdb}"
@@ -443,6 +462,7 @@ check:
     grep -qF 'ignoring override for this key' "${schema_compile_log}"
     GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled | grep -qx true
     GSETTINGS_SCHEMA_DIR="${schema_tmp}" GSETTINGS_BACKEND=memory gsettings get org.gnome.desktop.screensaver picture-uri | grep -qx "'file:///usr/share/backgrounds/day.jpg'"
+    tests/dell-lid-auth.sh
     tests/dell-xps-9350-policies.sh
     test -f docs/dell-xps-9350-secure-boot.md
     grep -qF 'cvs_provider=in-tree' docs/dell-xps-9350-secure-boot.md
