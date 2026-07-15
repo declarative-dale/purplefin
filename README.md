@@ -27,8 +27,12 @@ department and hardware profile:
 | Department | Workload |
 | --- | --- |
 | `base` | Shared image foundation, including Git and Micro. |
-| `support` | Base plus Espanso and RustConn. |
-| `development` | Base plus Ghostty, VSCodium, Ansible, Packer, OpenTofu, and OpenBao. |
+| `support` | Base plus the shared `devops` component, Espanso, and RustConn. |
+| `development` | Base plus the shared `devops` component. |
+
+| Reusable component | Workload | Referenced by |
+| --- | --- | --- |
+| `devops` | Ghostty and its defaults, VSCodium, Ansible, Packer, OpenTofu, OpenBao, and their supporting configuration. | `support`, `development` |
 
 | Hardware profile | Overlay |
 | --- | --- |
@@ -130,10 +134,11 @@ The `latest` tag tracks the `base` + `generic-x86_64` image. The
 `build-dell-no-ipu7` compatibility recipe produces the `support` + Dell
 no-camera test image. The full Dell camera profile uses the pinned
 7.1.2 fallback only while Bluefin's kernel is older than 7.1.2, then follows
-Bluefin's kernel. The development department provides `packer`, `ansible`,
-`tofu`, and `bao`. The base department provides Git and Micro. Inherited
-Tailscale packages, services, repositories, setup hooks, and user-facing tips
-are removed from every composition.
+Bluefin's kernel. The reusable `devops` component provides Ghostty, VSCodium,
+`packer`, `ansible`, `tofu`, and `bao`; both the support and development
+departments reference it. The base department provides Git and Micro.
+Inherited Tailscale packages, services, repositories, setup hooks, and
+user-facing tips are removed from every composition.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
 reintroduce the desktop RPM after migration to Flatpak.
 
@@ -407,10 +412,12 @@ non-working IPU7 inputs.
 - A centralized first-boot rpm-ostree runner with ordered tasks and
   `/var/lib/purplefin/firstboot/*.done` markers. It stops when a task stages a
   deployment so later tasks run after the required reboot.
-- The support department's graphical-session-bound Espanso service and capability and
-  RustConn Flatpak.
-- The development department's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
-  OpenTofu, OpenBao, HashiCorp repository, and OpenBao state-directory policy.
+- The reusable `devops` component's Ghostty defaults, VSCodium Flatpak,
+  Ansible, Packer, OpenTofu, OpenBao, HashiCorp repository, and OpenBao
+  state-directory policy; both support and development reference it.
+- The support department's graphical-session-bound Espanso service and
+  capability and RustConn Flatpak, in addition to the shared `devops`
+  component.
 - Removal of inherited Tailscale packages, enabled services, RPM repository
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.

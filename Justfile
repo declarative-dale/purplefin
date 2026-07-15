@@ -14,7 +14,7 @@ check:
     trap 'rm -rf "${tmpdir}" "${refind_tmp}"' EXIT
     cp -a system_files/. "${tmpdir}/"
     cp -a profile_files/roles/support/system_files/. "${tmpdir}/"
-    cp -a profile_files/roles/development/system_files/. "${tmpdir}/"
+    cp -a profile_files/components/devops/system_files/. "${tmpdir}/"
     cp -a profile_files/dell-xps-9350-intel/system_files/. "${tmpdir}/"
     install -d "${tmpdir}/usr/lib/systemd/system"
     install -d "${tmpdir}/usr/bin" "${tmpdir}/usr/sbin"
@@ -158,9 +158,10 @@ check:
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/build.sh
     grep -qF '### Migrating Bitwarden from the layered RPM' README.md
 
-    # Support owns Espanso and RustConn only.
+    # Support owns Espanso and RustConn and references the shared devops component.
     support_role=build_files/profiles/roles/support.sh
     support_root=profile_files/roles/support
+    grep -qF '/tmp/purplefin-build/profiles/components/devops.sh' "${support_role}"
     grep -qF 'purplefin_apply_role_overlay support' "${support_role}"
     grep -qF 'install espanso-wayland' "${support_role}"
     grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' "${support_role}"
@@ -197,40 +198,64 @@ check:
         build_files/profiles/dell-xps-9350-intel.sh \
         build_files/profiles/dell-xps-9350-intel-no-ipu7.sh
 
-    # Development owns Ghostty, infrastructure tools, and VSCodium.
+    # Devops is a reusable component referenced by support and development.
     development_role=build_files/profiles/roles/development.sh
-    development_root=profile_files/roles/development
+    devops_component=build_files/profiles/components/devops.sh
+    devops_root=profile_files/components/devops
+    devops_rpms="${devops_root}/manifests/rpms.list"
+    test -x "${devops_component}"
+    grep -qF '/tmp/purplefin-build/profiles/components/devops.sh' "${support_role}"
+    grep -qF '/tmp/purplefin-build/profiles/components/devops.sh' "${development_role}"
     grep -qF 'purplefin_apply_role_overlay development' "${development_role}"
-    grep -qF 'dnf5 -y install ghostty' "${development_role}"
-    for package in ansible openbao opentofu packer; do
-        grep -qE "^[[:space:]]*${package}$" "${development_role}"
+    grep -qF 'purplefin_apply_component_overlay "${component}"' "${devops_component}"
+    grep -qF 'dnf5 -y install "${devops_packages[@]}"' "${devops_component}"
+    grep -qF 'for command in ghostty ansible bao packer tofu' "${devops_component}"
+    test -f "${devops_rpms}"
+    test "$(grep -c '^[a-z0-9]' "${devops_rpms}")" -eq 5
+    for package in ghostty ansible packer opentofu openbao; do
+        grep -qxF "${package}" "${devops_rpms}"
     done
-    grep -qF 'dnf5 -y install "${infrastructure_packages[@]}"' "${development_role}"
-    grep -qF 'for command in ansible bao packer tofu' "${development_role}"
-    grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${development_root}/manifests/flatpaks.preinstall"
-    ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${development_root}/manifests/flatpaks.preinstall"
-    ghostty_skel="${development_root}/system_files/etc/skel/.config/ghostty/config.ghostty"
-    ghostty_shared="${development_root}/system_files/usr/share/purplefin/ghostty/config.ghostty"
+    grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${devops_root}/manifests/flatpaks.preinstall"
+    ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${devops_root}/manifests/flatpaks.preinstall"
+    ghostty_skel="${devops_root}/system_files/etc/skel/.config/ghostty/config.ghostty"
+    ghostty_shared="${devops_root}/system_files/usr/share/purplefin/ghostty/config.ghostty"
     test -f "${ghostty_skel}"
     test -f "${ghostty_shared}"
     cmp -s "${ghostty_skel}" "${ghostty_shared}"
     grep -qx 'copy-on-select = clipboard' "${ghostty_skel}"
     grep -qx 'right-click-action = paste' "${ghostty_skel}"
-    test -x "${development_root}/system_files/usr/libexec/purplefin/install-ghostty-defaults"
-    test -f "${development_root}/system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service"
-    hashicorp_repo="${development_root}/system_files/etc/yum.repos.d/hashicorp.repo"
+    test -x "${devops_root}/system_files/usr/libexec/purplefin/install-ghostty-defaults"
+    test -f "${devops_root}/system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service"
+    hashicorp_repo="${devops_root}/system_files/etc/yum.repos.d/hashicorp.repo"
     test -f "${hashicorp_repo}"
     grep -qx '\[hashicorp\]' "${hashicorp_repo}"
     grep -qx 'baseurl=https://rpm.releases.hashicorp.com/fedora/\$releasever/\$basearch/stable' "${hashicorp_repo}"
     grep -qx 'gpgkey=https://rpm.releases.hashicorp.com/gpg' "${hashicorp_repo}"
-    test -f "${development_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
-    grep -qx 'd /var/lib/openbao 0700 openbao openbao - -' "${development_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
+    test -f "${devops_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
+    grep -qx 'd /var/lib/openbao 0700 openbao openbao - -' "${devops_root}/system_files/usr/lib/tmpfiles.d/purplefin-openbao.conf"
+    ! rg -q 'dnf5.*(ghostty|ansible|packer|opentofu|openbao)|com\.vscodium\.codium' build_files/profiles/roles profile_files/roles
+    test -z "$(find profile_files/roles/development -type f -print -quit 2>/dev/null)"
+
+    # Reapplying the component is a no-op, including across subprocesses.
+    devops_state="${tmpdir}/devops-component-state"
+    install -d "${devops_state}"
+    touch "${devops_state}/devops.applied"
+    component_output="$(
+        PURPLEFIN_BUILD_ROOT="${PWD}/build_files" \
+        PURPLEFIN_COMPONENT_STATE_DIR="${devops_state}" \
+        "${devops_component}"
+    )"
+    test "${component_output}" = ':: Devops component already applied'
+
     test ! -e system_files/etc/skel/.config/ghostty/config.ghostty
     test ! -e system_files/etc/yum.repos.d/hashicorp.repo
     grep -qx 'excludepkgs=bitwarden\*' system_files/etc/yum.repos.d/terra.repo
 
-    grep -qF 'cp -a "${system_root}/." /' build_files/profiles/lib/role-common.sh
-    grep -qF '/usr/share/flatpak/preinstall.d/purplefin-${role}.preinstall' build_files/profiles/lib/role-common.sh
+    overlay_common=build_files/profiles/lib/role-common.sh
+    grep -qF 'cp -a "${system_root}/." /' "${overlay_common}"
+    grep -qF 'purplefin_apply_overlay roles "${role}" "purplefin-${role}"' "${overlay_common}"
+    grep -qF 'purplefin_apply_overlay components "${component}" "purplefin-component-${component}"' "${overlay_common}"
+    grep -qF '/usr/share/flatpak/preinstall.d/${manifest_name}.preinstall' "${overlay_common}"
 
     # Common removal and branding policy remains global.
     grep -qF 'systemctl disable tailscaled.service' build_files/build.sh

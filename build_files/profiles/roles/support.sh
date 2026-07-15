@@ -4,6 +4,9 @@ set -euo pipefail
 # shellcheck source=/tmp/purplefin-build/profiles/lib/role-common.sh
 source /tmp/purplefin-build/profiles/lib/role-common.sh
 
+echo ":: Applying support devops component"
+/tmp/purplefin-build/profiles/components/devops.sh
+
 purplefin_apply_role_overlay support
 
 echo ":: Installing support role applications"
