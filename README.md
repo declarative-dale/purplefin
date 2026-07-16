@@ -14,6 +14,18 @@ ghcr.io/declarative-dale/purplefin
 
 ## Build-Time Composition
 
+Purplefin's public build input is a named `BUILD_PROFILE`. Each profile is an
+ordered list of reusable modules and exactly one hardware module. The primary
+profiles are `base-generic` and `dale`; Dale combines base, sales, trainer,
+support, and Dell XPS 13 9350 Intel/IPU7 hardware. Legacy `BUILD_ROLE` plus
+hardware-valued `BUILD_PROFILE` inputs remain available for migration.
+
+Reusable workload modules include `developer` (DevOps tooling plus Rust),
+`sales` (Thunderbird), `support` (Espanso and RustConn), `trainer` (Grist
+Firefox launcher), `executive` (Vates Notes Firefox launcher), and `it`
+(RustDesk). The Framework hardware module is intentionally a no-tuning
+scaffold until model-specific settings are validated.
+
 Purplefin composes one department with one hardware profile and emits one final
 bootc image. The common foundation is applied first, followed by the selected
 department and hardware profile:

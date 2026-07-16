@@ -18,24 +18,16 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.department }} / ${{ matrix.hardware }}
+    name: Build ${{ matrix.profile }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - department: base
-            hardware: generic-x86_64
+          - profile: base-generic
             tags: generic-x86_64 latest base-generic-x86_64
-          - department: support
-            hardware: dell-xps-9350-intel
-            tags: dell-xps-9350-intel support-dell-xps-9350-intel
-          - department: support
-            hardware: lenovo-generic
-            tags: support-lenovo-generic
-          - department: development
-            hardware: desktop-x86_64
-            tags: development-desktop-x86_64
+          - profile: dale
+            tags: dale dell-xps-9350-intel
 
     steps:
       - name: Checkout
@@ -46,14 +38,13 @@ jobs:
         shell: bash
         run: |
           base_kernel="$(skopeo inspect --retry-times 3 docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
-          target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.hardware }}' "${base_kernel}")"
+          target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.profile }}' "${base_kernel}")"
           echo "release=${target_kernel}" >> "${GITHUB_OUTPUT}"
 
       - name: Build image
         env:
           TAGS: ${{ matrix.tags }}
-          BUILD_ROLE: ${{ matrix.department }}
-          BUILD_PROFILE: ${{ matrix.hardware }}
+          BUILD_PROFILE: ${{ matrix.profile }}
           PURPLEFIN_OSTREE_LINUX: ${{ steps.kernel.outputs.release }}
         shell: bash
         run: |
@@ -63,7 +54,6 @@ jobs:
           buildah bud \
             --file ./Containerfile \
             --label "ostree.linux=${PURPLEFIN_OSTREE_LINUX}" \
-            --build-arg "BUILD_ROLE=${BUILD_ROLE}" \
             --build-arg "BUILD_PROFILE=${BUILD_PROFILE}" \
             --build-arg BASE_IMAGE=ghcr.io/ublue-os/bluefin \
             --build-arg BASE_TAG=stable \
