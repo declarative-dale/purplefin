@@ -25,7 +25,7 @@ version_at_least() {
 }
 
 case "${profile}" in
-	dale|dell-xps-9350-intel)
+	dale|dell-xps-9350-intel|base-dell-xps-9350-intel|sales-dell-xps-9350-intel|support-dell-xps-9350-intel)
 		if [[ -n "${PURPLEFIN_DELL_IPU7_KERNEL_EVR:-}" ]]; then
 			printf '%s.%s\n' "${PURPLEFIN_DELL_IPU7_KERNEL_EVR#0:}" "${base_arch}"
 		elif [[ "${PURPLEFIN_DELL_IPU7_KERNEL_ALLOW_UNPINNED:-0}" == "1" ]]; then
@@ -40,7 +40,7 @@ case "${profile}" in
 	dell-xps-9350-intel-no-ipu7)
 		printf '%s.%s\n' "${PURPLEFIN_DELL_MAINLINE_KERNEL_EVR:-${pinned_evr}}" "${base_arch}"
 		;;
-	base-generic|developer-generic|sales-generic|trainer-generic|executive-generic|it-generic|generic-x86_64|desktop-x86_64|lenovo-generic)
+	base-generic|sales-generic|support-generic|developer-generic|trainer-generic|executive-generic|it-generic|generic-x86_64|desktop-x86_64|lenovo-generic)
 		printf '%s\n' "${base_release}"
 		;;
 	*)

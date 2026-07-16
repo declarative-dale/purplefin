@@ -7,7 +7,7 @@ check:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    find build_files system_files/usr/libexec/purplefin profile_files -type f \( -name '*.sh' -o -perm -111 \) -exec bash -n {} +
+    find build_files system_files/usr/libexec/purplefin profile_files installer/root/usr/libexec -type f \( -name '*.sh' -o -perm -111 \) -exec bash -n {} +
 
     tmpdir="$(mktemp -d)"
     refind_tmp="$(mktemp -d)"
@@ -85,10 +85,12 @@ check:
     test -e "${firstboot_test}/pending-markers/40-pending.done"
 
     # Named profiles compose ordered reusable modules and retain a legacy path.
-    for profile in base-generic dale developer-generic sales-generic trainer-generic executive-generic it-generic; do
+    for profile in base-generic base-dell-xps-9350-intel sales-generic sales-dell-xps-9350-intel support-generic support-dell-xps-9350-intel dale developer-generic trainer-generic executive-generic it-generic; do
         test -f "build_files/profiles/profiles/${profile}.conf"
         bash -n "build_files/profiles/profiles/${profile}.conf"
     done
+
+    tests/installer-selector.sh
     for module in base developer support sales trainer executive it hardware-generic-x86_64 hardware-framework-laptop hardware-dell-xps-9350-intel; do
         test -x "build_files/modules/${module}.sh"
     done
@@ -258,13 +260,12 @@ check:
     grep -qF '/usr/share/flatpak/preinstall.d/${manifest_name}.preinstall' "${overlay_common}"
 
     # Common removal and branding policy remains global.
-    grep -qF 'systemctl disable tailscaled.service' build_files/build.sh
-    grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/build.sh
-    grep -qF 'rm -f /etc/yum.repos.d/tailscale.repo' build_files/build.sh
-    grep -qF 'rm -f /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' build_files/build.sh
-    grep -qF 'rm -f /usr/share/fish/completions/tailscale.fish' build_files/build.sh
-    grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/build.sh
-    grep -qF "sed -i '/^Tailscale is included,/d'" build_files/build.sh
+    grep -qF 'systemctl disable tailscaled.service' build_files/modules/base.sh
+    grep -qF 'dnf5 -y remove --no-autoremove tailscale' build_files/modules/base.sh
+    grep -qF 'rm -f /etc/yum.repos.d/tailscale.repo' build_files/modules/base.sh
+    grep -qF '/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh' build_files/modules/base.sh
+    grep -qF '/usr/share/fish/completions/tailscale.fish' build_files/modules/base.sh
+    grep -qF "sed -i '/^\\[tailscale-stable\\]$/,+1d'" build_files/modules/base.sh
     test -f system_files/usr/share/plymouth/themes/spinner/watermark.png
     test -f system_files/usr/share/plymouth/themes/spinner/silverblue-watermark.png
     test -f system_files/usr/share/pixmaps/fedora-gdm-logo.png
@@ -291,27 +292,25 @@ check:
     test "$(build_files/select-ostree-linux.sh generic-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh desktop-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh lenovo-generic 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
-    grep -qF 'BUILD_ROLE=' .github/workflows/build.yml
-    grep -qF 'matrix.department' .github/workflows/build.yml
     grep -qF 'BUILD_PROFILE=' .github/workflows/build.yml
-    grep -qF 'matrix.hardware' .github/workflows/build.yml
-    test "$(grep -c '^          - department:' .github/workflows/build.yml)" -eq 4
+    test "$(grep -c '^          - profile:' .github/workflows/build.yml)" -eq 7
     ci_matrix="$(awk '
-        $1 == "-" && $2 == "department:" { department = $3 }
-        $1 == "hardware:" { hardware = $2 }
-        $1 == "tags:" && department != "" {
+        $1 == "-" && $2 == "profile:" { profile = $3 }
+        $1 == "tags:" && profile != "" {
             tags = $0
             sub(/^[[:space:]]*tags:[[:space:]]*/, "", tags)
-            print department "|" hardware "|" tags
-            department = ""
-            hardware = ""
+            print profile "|" tags
+            profile = ""
         }
     ' .github/workflows/build.yml)"
     test "${ci_matrix}" = "$(printf '%s\n' \
-        'base|generic-x86_64|generic-x86_64 latest base-generic-x86_64' \
-        'support|dell-xps-9350-intel|dell-xps-9350-intel support-dell-xps-9350-intel' \
-        'support|lenovo-generic|support-lenovo-generic' \
-        'development|desktop-x86_64|development-desktop-x86_64')"
+        'base-generic|generic-x86_64 latest base-generic-x86_64' \
+        'base-dell-xps-9350-intel|base-dell-xps-9350-intel' \
+        'sales-generic|sales-generic' \
+        'sales-dell-xps-9350-intel|sales-dell-xps-9350-intel' \
+        'support-generic|support-generic' \
+        'support-dell-xps-9350-intel|support-dell-xps-9350-intel' \
+        'dale|dale dell-xps-9350-intel')"
     grep -qF 'PURPLEFIN_OSTREE_LINUX=' .github/workflows/build.yml
     grep -qF 'ostree.linux=' .github/workflows/build.yml
     grep -qF 'steps.kernel.outputs.release' .github/workflows/build.yml
@@ -327,8 +326,7 @@ check:
     grep -qF '/var/lib/rpm-state' build_files/build.sh
     grep -qF '/var/log/dnf5.log*' build_files/build.sh
     grep -qF 'installed_kernel_releases' build_files/build.sh
-    grep -qF 'Removing stale module tree' build_files/build.sh
-    grep -qF 'rm -f /usr/share/fish/completions/tailscale.fish' build_files/build.sh
+    grep -qF '/usr/share/fish/completions/tailscale.fish' build_files/modules/base.sh
     test -x system_files/usr/libexec/purplefin/run-firstboot-rpm-ostree
     test -z "$(find system_files -iname '*ipu7*' -print -quit)"
     test -z "$(find system_files profile_files -iname '*librepods*' -print -quit)"

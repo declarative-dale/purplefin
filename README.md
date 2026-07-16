@@ -36,6 +36,20 @@ department and hardware profile:
   retained for compatibility, but it now means hardware rather than the whole
   image personality.
 
+## Graphical installer pilot
+
+The optional Purplefin installer ISO uses Anaconda for storage, accounts, and
+networking, then installs one verified, prebuilt bootc image. It does not layer
+packages locally. After networking is configured, the Purplefin screen offers
+the Base, Sales, and Support presets; on a detected Dell XPS 13 9350 it also
+offers Dale. The selected GHCR tag is verified with the repository's GitHub
+Actions cosign identity and resolved to an immutable digest before installation.
+Unknown hardware safely receives a generic image.
+
+The ISO is intentionally built on demand from the **Build Purplefin installer
+ISO** workflow. See [installer/README.md](installer/README.md) for the source
+selection interface and image-builder requirements.
+
 | Department | Workload |
 | --- | --- |
 | `base` | Shared image foundation, including Git, Micro, and QEMU disk-image tooling. |

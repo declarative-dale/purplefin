@@ -1,0 +1,39 @@
+name: Build Purplefin installer ISO
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build installer environment
+        run: |
+          podman build \
+            --file installer/Containerfile \
+            --tag localhost/purplefin-anaconda:latest \
+            .
+
+      - name: Build ISO
+        run: |
+          mkdir -p output
+          podman run --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            --volume "${PWD}/output:/output" \
+            --volume /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type bootc-installer \
+            --bootc-installer-payload-ref ghcr.io/declarative-dale/purplefin:base-generic-x86_64 \
+            localhost/purplefin-anaconda:latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: purplefin-installer-iso
+          path: output/*.iso
+          if-no-files-found: error
