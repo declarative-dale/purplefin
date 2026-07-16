@@ -1,190 +1,79 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-profile="${1:-${BUILD_PROFILE:-generic-x86_64}}"
-role="${2:-${BUILD_ROLE:-base}}"
-profile_script="/tmp/purplefin-build/profiles/${profile}.sh"
-role_script="/tmp/purplefin-build/profiles/roles/${role}.sh"
-authselect_lib="/tmp/purplefin-build/profiles/lib/authselect-features.sh"
-hardware_security_lib="/tmp/purplefin-build/profiles/lib/hardware-security.sh"
+build_root="${PURPLEFIN_BUILD_ROOT:-/tmp/purplefin-build}"
+profile_files_root="${PURPLEFIN_PROFILE_FILES_ROOT:-/tmp/purplefin-profile-files}"
+profile="${1:-${BUILD_PROFILE:-base-generic}}"
+legacy_role="${2:-${BUILD_ROLE:-}}"
+profile_definition="${build_root}/profiles/profiles/${profile}.conf"
+module_root="${build_root}/modules"
 
-if [[ ! "${profile}" =~ ^[a-z0-9._-]+$ ]]; then
-	echo "Invalid hardware profile: ${profile}" >&2
-	exit 2
-fi
+valid_name='^[a-z0-9._-]+$'
+[[ "${profile}" =~ ${valid_name} ]] || { echo "Invalid build profile: ${profile}" >&2; exit 2; }
 
-if [[ ! -x "${profile_script}" ]]; then
-	echo "Unknown hardware profile: ${profile}" >&2
-	echo "Available hardware profiles:" >&2
-	find /tmp/purplefin-build/profiles -maxdepth 1 -type f -name '*.sh' -printf '  %f\n' | sed 's/\.sh$//' >&2
-	exit 2
-fi
-
-if [[ ! "${role}" =~ ^[a-z0-9._-]+$ ]]; then
-	echo "Invalid build role: ${role}" >&2
-	exit 2
-fi
-
-if [[ ! -x "${role_script}" ]]; then
-	echo "Unknown build role: ${role}" >&2
-	echo "Available build roles:" >&2
-	find /tmp/purplefin-build/profiles/roles -maxdepth 1 -type f -name '*.sh' -printf '  %f\n' | sed 's/\.sh$//' >&2
-	exit 2
+# A named profile is the public composition interface.  The legacy role plus
+# hardware pair remains accepted so existing callers can migrate gradually.
+if [[ -f "${profile_definition}" ]]; then
+	# shellcheck source=/dev/null
+	source "${profile_definition}"
+	[[ "${profile_name:-}" == "${profile}" ]] || { echo "Invalid profile definition: ${profile_definition}" >&2; exit 2; }
+	declare -p modules >/dev/null 2>&1 || { echo "Profile ${profile} does not define modules" >&2; exit 2; }
+else
+	[[ -x "${build_root}/profiles/${profile}.sh" ]] || { echo "Unknown build profile: ${profile}" >&2; exit 2; }
+	legacy_role="${legacy_role:-base}"
+	[[ "${legacy_role}" =~ ${valid_name} && -x "${build_root}/profiles/roles/${legacy_role}.sh" ]] || {
+		echo "Unknown legacy build role: ${legacy_role}" >&2; exit 2;
+	}
+	profile="legacy-${legacy_role}-${profile}"
+	modules=(base "legacy-role-${legacy_role}" "legacy-hardware-${1:-${BUILD_PROFILE:-generic-x86_64}}")
 fi
 
 # shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
-source "${authselect_lib}"
+source "${build_root}/profiles/lib/authselect-features.sh"
 # shellcheck source=/tmp/purplefin-build/profiles/lib/hardware-security.sh
-source "${hardware_security_lib}"
+source "${build_root}/profiles/lib/hardware-security.sh"
 purplefin_authselect_reset
+
+hardware_count=0
+declare -A applied_modules=()
+for module in "${modules[@]}"; do
+	[[ "${module}" =~ ${valid_name} ]] || { echo "Invalid module in ${profile}: ${module}" >&2; exit 2; }
+	[[ -z "${applied_modules[${module}]:-}" ]] || { echo "Duplicate module in ${profile}: ${module}" >&2; exit 2; }
+	module_script="${module_root}/${module}.sh"
+	[[ -x "${module_script}" ]] || { echo "Unknown module in ${profile}: ${module}" >&2; exit 2; }
+	if [[ "${module}" == hardware-* || "${module}" == legacy-hardware-* ]]; then
+		((hardware_count += 1))
+	fi
+	if [[ "${module}" == base ]]; then
+		[[ "${#applied_modules[@]}" -eq 0 ]] || { echo "base must be the first module in ${profile}" >&2; exit 2; }
+	fi
+	echo ":: Applying Purplefin module: ${module}"
+	"${module_script}"
+	applied_modules["${module}"]=1
+done
+
+[[ -n "${applied_modules[base]:-}" ]] || { echo "Profile ${profile} must include base" >&2; exit 2; }
+[[ "${hardware_count}" -eq 1 ]] || { echo "Profile ${profile} must include exactly one hardware module" >&2; exit 2; }
 
 install -d /usr/share/purplefin
 printf '%s\n' "${profile}" > /usr/share/purplefin/build-profile
-printf '%s\n' "${profile}" > /usr/share/purplefin/build-hardware
-printf '%s\n' "${role}" > /usr/share/purplefin/build-role
-
-chmod 0755 /usr/libexec/purplefin/apply-brew-bundle
-chmod 0755 /usr/libexec/purplefin/run-firstboot-rpm-ostree
-chmod 0755 /usr/libexec/purplefin/update-bitwarden-flatpak
-
-echo ":: Removing inherited Tailscale"
-systemctl disable tailscaled.service >/dev/null 2>&1 || true
-rm -f /etc/yum.repos.d/tailscale.repo
-rm -f /usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh
-rm -f /usr/share/fish/completions/tailscale.fish
-if [[ -f /etc/dnf/repos.override.d/99-config_manager.repo ]]; then
-	sed -i '/^\[tailscale-stable\]$/,+1d' /etc/dnf/repos.override.d/99-config_manager.repo
-fi
-if [[ -f /usr/share/ublue-os/motd/tips/10-tips.md ]]; then
-	sed -i '/^Tailscale is included,/d' /usr/share/ublue-os/motd/tips/10-tips.md
-fi
-if rpm -q tailscale >/dev/null 2>&1; then
-	dnf5 -y remove --no-autoremove tailscale
-fi
-rm -f /etc/default/tailscaled
-
-if rpm -q tailscale >/dev/null 2>&1; then
-	echo "Tailscale RPM is still installed" >&2
-	exit 1
-fi
-for command in tailscale tailscaled; do
-	if command -v "${command}" >/dev/null 2>&1; then
-		echo "Inherited Tailscale command is still present: ${command}" >&2
-		exit 1
-	fi
-done
-for path in \
-	/etc/systemd/system/multi-user.target.wants/tailscaled.service \
-	/etc/yum.repos.d/tailscale.repo \
-	/usr/lib/systemd/system/tailscaled.service \
-	/usr/share/fish/completions/tailscale.fish \
-	/usr/share/ublue-os/privileged-setup.hooks.d/10-tailscale.sh; do
-	if [[ -e "${path}" || -L "${path}" ]]; then
-		echo "Inherited Tailscale path is still present: ${path}" >&2
-		exit 1
-	fi
-done
-if grep -q '^\[tailscale-stable\]$' /etc/dnf/repos.override.d/99-config_manager.repo 2>/dev/null; then
-	echo "Inherited Tailscale repository override is still present" >&2
-	exit 1
-fi
-if grep -q '^Tailscale is included,' /usr/share/ublue-os/motd/tips/10-tips.md 2>/dev/null; then
-	echo "Inherited Tailscale MOTD tip is still present" >&2
-	exit 1
-fi
-
-echo ":: Installing base Purplefin RPM overlays"
-base_packages=(
-	fuse
-	fuse-libs
-	git
-	micro
-	nm-connection-editor
-	nm-connection-editor-desktop
-	wireguard-tools
-)
-base_qemu_packages=(
-	qemu-block-curl
-	qemu-block-dmg
-	qemu-block-iscsi
-	qemu-block-nfs
-	qemu-block-ssh
-	qemu-img
-	qemu-tools
-)
-dnf5 -y install "${base_packages[@]}"
-# Fedora packages the qemu-img core tools in qemu-img rather than a separate
-# qemu-img-core package. Avoid qemu-tools' optional SystemTap/kernel-devel stack.
-dnf5 -y --setopt=install_weak_deps=False install "${base_qemu_packages[@]}"
-
-for package in "${base_packages[@]}" "${base_qemu_packages[@]}"; do
-	rpm -q "${package}"
-done
-command -v git >/dev/null
-for command in elf2dmp micro nm-connection-editor qemu-edid qemu-img qemu-io qemu-keymap qemu-nbd qemu-storage-daemon wg; do
-	command -v "${command}" >/dev/null
-done
-test -f /usr/share/applications/nm-connection-editor.desktop
-
-bash /tmp/purplefin-build/install-bitwarden-cli-rpm.sh
-rpm -q purplefin-bitwarden-cli
-test "$(rpm -qf --qf '%{NAME}\n' /usr/bin/bw)" = "purplefin-bitwarden-cli"
-command -v bw >/dev/null
-
-echo ":: Enabling common Purplefin services"
-systemctl enable flatpak-nuke-fedora.service
-systemctl enable flatpak-preinstall.service
-systemctl enable purplefin-brew-bundle.service
-systemctl enable purplefin-bitwarden-flatpak-update.timer
-
-echo ":: Applying Purplefin build role: ${role}"
-"${role_script}"
-
-echo ":: Applying Purplefin hardware profile: ${profile}"
-"${profile_script}"
-purplefin_apply_hardware_security "${profile}"
-
-purplefin_authselect_finalize
+printf '%s\n' "${modules[@]}" > /usr/share/purplefin/build-modules
 
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]]; then
 	find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -exec chmod 0755 {} +
 fi
-
 if [[ -d /usr/libexec/purplefin/firstboot-rpm-ostree.d ]] && find /usr/libexec/purplefin/firstboot-rpm-ostree.d -maxdepth 1 -type f -perm /111 -print -quit | grep -q .; then
-	echo ":: Enabling Purplefin rpm-ostree first-boot tasks"
 	systemctl enable purplefin-firstboot-rpm-ostree.service
-else
-	echo ":: No Purplefin rpm-ostree first-boot tasks enabled for role ${role} and hardware ${profile}"
 fi
 
-if [[ -z "${PURPLEFIN_OSTREE_LINUX:-}" ]]; then
-	echo 'PURPLEFIN_OSTREE_LINUX is required so the OCI kernel label matches the image payload' >&2
-	exit 1
-fi
+purplefin_authselect_finalize
+
+[[ -n "${PURPLEFIN_OSTREE_LINUX:-}" ]] || { echo 'PURPLEFIN_OSTREE_LINUX is required' >&2; exit 1; }
 mapfile -t installed_kernel_releases < <(rpm -q --qf '%{EVR}.%{ARCH}\n' kernel-core)
 if ((${#installed_kernel_releases[@]} != 1)) || [[ "${installed_kernel_releases[0]}" != "${PURPLEFIN_OSTREE_LINUX}" ]]; then
-	echo "Kernel payload does not match ostree.linux=${PURPLEFIN_OSTREE_LINUX}: ${installed_kernel_releases[*]:-none}" >&2
+	echo "Kernel payload does not match ostree.linux=${PURPLEFIN_OSTREE_LINUX}" >&2
 	exit 1
 fi
-while IFS= read -r -d '' modules_dir; do
-	if [[ "$(basename "${modules_dir}")" != "${PURPLEFIN_OSTREE_LINUX}" ]]; then
-		while IFS= read -r -d '' module_file; do
-			if owner="$(rpm -qf --qf '%{NAME}' "${module_file}" 2>/dev/null)"; then
-				echo "Refusing to prune ${modules_dir}; ${module_file} is still owned by ${owner}" >&2
-				exit 1
-			fi
-		done < <(find "${modules_dir}" \( -type f -o -type l \) -print0)
-		echo ":: Removing stale module tree ${modules_dir}"
-		rm -rf "${modules_dir}"
-	fi
-done < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -print0)
-test -f "/usr/lib/modules/${PURPLEFIN_OSTREE_LINUX}/vmlinuz"
-test -f "/usr/lib/modules/${PURPLEFIN_OSTREE_LINUX}/initramfs.img"
-
-# Package transactions can recreate completions owned by otherwise retained shells.
-rm -f /usr/share/fish/completions/tailscale.fish
-test ! -e /usr/share/fish/completions/tailscale.fish
-
 dnf5 clean all
 rm -f /boot/symvers-*.xz
 rm -rf /run/dnf /var/cache/libdnf5 /var/cache/ldconfig/aux-cache /var/lib/authselect/backups /var/lib/dnf/repos /var/lib/dnf/system-repo.lock /var/lib/rpm-state /var/log/dnf5.log*
