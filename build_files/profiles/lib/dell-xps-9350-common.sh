@@ -5,11 +5,14 @@ purplefin_configure_dell_xps_9350_common() {
 	local battery_service="purplefin-dell-xps-9350-battery.service"
 	local panel_service="purplefin-dell-xps-9350-panel.service"
 	local panel_wants="/etc/systemd/user/graphical-session.target.wants/${panel_service}"
+	local lid_auth_helper="/usr/libexec/purplefin/dell-lid-is-open"
+	local lid_auth_stack="/etc/pam.d/purplefin-dell-lid-auth"
+	local password_auth_stack="/etc/pam.d/purplefin-dell-password-auth"
 	local schema_dir="/usr/share/glib-2.0/schemas"
 	local tuned_ppd_conf="/etc/tuned/ppd.conf"
 	local tuned_profile="purplefin-dell-xps-9350-performance"
 	local tuned_profile_conf="/usr/lib/tuned/profiles/${tuned_profile}/tuned.conf"
-	local schema_validation_dir tuned_ppd_tmp command expected_setting
+	local lid_validation_dir schema_validation_dir tuned_ppd_tmp command expected_setting
 
 	for command in busctl gdctl gdbus gsettings glib-compile-schemas systemd-hwdb upower; do
 		command -v "${command}" >/dev/null 2>&1 || {
@@ -20,7 +23,33 @@ purplefin_configure_dell_xps_9350_common() {
 	test -f /usr/lib/systemd/system/upower.service
 
 	chmod 0755 /usr/libexec/purplefin/configure-dell-xps-9350-battery
+	chmod 0755 "${lid_auth_helper}"
 	chmod 0755 /usr/libexec/purplefin/dell-xps-9350-panel-policy
+	chmod 0644 \
+		/etc/pam.d/polkit-1 \
+		"${lid_auth_stack}" \
+		"${password_auth_stack}" \
+		/etc/pam.d/sudo
+
+	echo ":: Configuring Dell XPS 9350 lid-aware privilege authentication"
+	test -x "${lid_auth_helper}"
+	grep -qxF 'auth       substack     purplefin-dell-lid-auth' /etc/pam.d/sudo
+	grep -qxF 'auth       substack     purplefin-dell-lid-auth' /etc/pam.d/polkit-1
+	grep -qxF 'auth [success=2 ignore=2 default=ignore] pam_exec.so quiet quiet_log /usr/bin/env -i /usr/libexec/purplefin/dell-lid-is-open' "${lid_auth_stack}"
+	grep -qxF 'auth substack purplefin-dell-password-auth' "${lid_auth_stack}"
+	grep -qxF 'auth substack system-auth' "${lid_auth_stack}"
+	grep -qxF 'auth sufficient pam_unix.so' "${password_auth_stack}"
+	! grep -Eq 'pam_(fprintd|u2f)[.]so' "${password_auth_stack}"
+	lid_validation_dir="$(mktemp -d)"
+	install -d "${lid_validation_dir}/LID0"
+	printf '%s\n' 'state: open' >"${lid_validation_dir}/LID0/state"
+	"${lid_auth_helper}" --state-root "${lid_validation_dir}"
+	printf '%s\n' 'state: closed' >"${lid_validation_dir}/LID0/state"
+	if "${lid_auth_helper}" --state-root "${lid_validation_dir}"; then
+		echo "Dell lid helper accepted a closed test lid" >&2
+		exit 1
+	fi
+	rm -rf "${lid_validation_dir}"
 
 	echo ":: Configuring Dell XPS 9350 battery policy"
 	systemd-hwdb --strict update

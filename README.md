@@ -14,44 +14,68 @@ ghcr.io/declarative-dale/purplefin
 
 ## Build-Time Composition
 
-Purplefin follows a base → role → hardware build pipeline and emits one final
-bootc image:
+Purplefin's public build input is a named `BUILD_PROFILE`. Each profile is an
+ordered list of reusable modules and exactly one hardware module. The primary
+profiles are `base-generic` and `dale`; Dale combines base, sales, trainer,
+support, and Dell XPS 13 9350 Intel/IPU7 hardware. Legacy `BUILD_ROLE` plus
+hardware-valued `BUILD_PROFILE` inputs remain available for migration.
 
-- `BUILD_ROLE` selects the software workload.
+Reusable workload modules include `developer` (DevOps tooling plus Rust),
+`sales` (Thunderbird), `support` (Espanso and RustConn), `trainer` (Grist
+Firefox launcher), `executive` (Vates Notes Firefox launcher), and `it`
+(RustDesk). The Framework hardware module is intentionally a no-tuning
+scaffold until model-specific settings are validated.
+
+Purplefin composes one department with one hardware profile and emits one final
+bootc image. The common foundation is applied first, followed by the selected
+department and hardware profile:
+
+- `BUILD_ROLE` selects the department workload. Its historical name is retained
+  for build compatibility.
 - `BUILD_PROFILE` selects the hardware overlay. The historical variable name is
   retained for compatibility, but it now means hardware rather than the whole
   image personality.
 
-| Role | Workload |
+| Department | Workload |
 | --- | --- |
-| `base` | Shared image foundation, including Git and Micro. |
-| `support` | Base plus Espanso, RustConn, and optional PAM U2F policy. |
-| `development` | Base plus Ghostty, VSCodium, Ansible, Packer, OpenTofu, and OpenBao. |
-| `workstation` | Base plus both support and development, preserving the complete legacy payload. |
+| `base` | Shared image foundation, including Git, Micro, and QEMU disk-image tooling. |
+| `support` | Base plus the shared `devops` component, Espanso, and RustConn. |
+| `development` | Base plus the shared `devops` component. |
+
+| Reusable component | Workload | Referenced by |
+| --- | --- | --- |
+| `devops` | Ghostty and its defaults, VSCodium, Ansible, Packer, OpenTofu, OpenBao, and their supporting configuration. | `support`, `development` |
 
 | Hardware profile | Overlay |
 | --- | --- |
 | `generic-x86_64` | Generic x86-64 hardware with no vendor-specific overlay. |
 | `desktop-x86_64` | Neutral generic x86-64 desktop scaffold for future hardware policy. |
 | `lenovo-generic` | Neutral Lenovo scaffold for future hardware policy. |
-| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, fingerprint support, rEFInd, and the IPU7 camera stack. |
-| `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera policies and pinned mainline kernel, but no IPU7 camera integration. |
+| `dell-xps-9350-intel` | Dell XPS 13 9350 policies, lid-aware privilege authentication, rEFInd, and the IPU7 camera stack. |
+| `dell-xps-9350-intel-no-ipu7` | Dell XPS 13 9350 test overlay with its non-camera and lid-aware authentication policies and pinned mainline kernel, but no IPU7 camera integration. |
 
-The defaults remain `workstation` and `generic-x86_64`. The legacy
-`generic-x86_64`, `latest`, and `dell-xps-9350-intel` tags use the workstation
-role and preserve their existing payloads. Roles and hardware profiles are
-build inputs, not packages or layers selected by the installer. Each supported
-pair is precomposed and published as one complete OCI image; `bootc install`,
-`bootc switch`, and subsequent upgrades track that single final tag.
+Every hardware profile also applies the shared hardware-security baseline:
+fingerprint authentication, PAM U2F/FIDO2 support, YubiKey management, and
+smart-card services. User-specific fingerprint enrollments and security-key
+mappings remain local to each machine and are never built into an image.
+Both Dell profiles make `sudo` and polkit authentication lid-aware: an open lid
+uses the normal fingerprint-first stack, while a closed or indeterminate lid
+uses the local account password without attempting fingerprint authentication.
+
+The default pair is the `base` department with `generic-x86_64` hardware. The
+`generic-x86_64` and `latest` compatibility tags point to that same build. The
+`dell-xps-9350-intel` compatibility tag points to the `support` department with
+the Dell hardware profile. Departments and hardware profiles are independent
+build inputs, but every published image contains exactly one of each; they are
+not packages or layers selected by the installer. `bootc install`, `bootc
+switch`, and subsequent upgrades track that single precomposed image tag.
 
 The build workflow publishes these representative combinations:
 
-| Role | Hardware | Image tag |
+| Department | Hardware | Image tags |
 | --- | --- | --- |
-| `workstation` | `generic-x86_64` | `generic-x86_64` and `latest` |
-| `workstation` | `dell-xps-9350-intel` | `dell-xps-9350-intel` |
-| `base` | `generic-x86_64` | `base-generic-x86_64` |
-| `support` | `dell-xps-9350-intel` | `support-dell-xps-9350-intel` |
+| `base` | `generic-x86_64` | `generic-x86_64`, `latest`, and `base-generic-x86_64` |
+| `support` | `dell-xps-9350-intel` | `dell-xps-9350-intel` and `support-dell-xps-9350-intel` |
 | `support` | `lenovo-generic` | `support-lenovo-generic` |
 | `development` | `desktop-x86_64` | `development-desktop-x86_64` |
 
@@ -67,9 +91,10 @@ just build-support-lenovo
 just build-development-desktop
 ```
 
-The first three recipes are compatibility entry points and build the
-`workstation` role. The remaining recipes exercise representative role and
-hardware combinations.
+The first three recipes are compatibility entry points: generic builds
+`base` + `generic-x86_64`, while both Dell recipes build `support` with the
+corresponding Dell hardware profile. The remaining recipes name their
+department and hardware combinations explicitly.
 
 The `just` targets inspect Bluefin's `ostree.linux` label and write the matching
 kernel label into the derived image. For an equivalent direct build, resolve
@@ -79,7 +104,7 @@ that value first:
 base_kernel="$(skopeo inspect docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
 target_kernel="$(build_files/select-ostree-linux.sh dell-xps-9350-intel "${base_kernel}")"
 podman build \
-  --build-arg BUILD_ROLE=workstation \
+  --build-arg BUILD_ROLE=support \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_OSTREE_LINUX="${target_kernel}" \
   --label "ostree.linux=${target_kernel}" \
@@ -91,7 +116,7 @@ The Dell profile also accepts build-time kernel canary arguments:
 
 ```bash
 podman build \
-  --build-arg BUILD_ROLE=workstation \
+  --build-arg BUILD_ROLE=support \
   --build-arg BUILD_PROFILE=dell-xps-9350-intel \
   --build-arg PURPLEFIN_DELL_IPU7_KERNEL_EVR=7.1.2-355.vanilla.fc44 \
   --build-arg PURPLEFIN_OSTREE_LINUX=7.1.2-355.vanilla.fc44.x86_64 \
@@ -107,7 +132,7 @@ Its neutral canary arguments are
 
 ## Switch To An Image
 
-Select the tag containing the role and hardware you want. For example:
+Select the complete department and hardware build you want. For example:
 
 ```bash
 run0 bootc switch ghcr.io/declarative-dale/purplefin:generic-x86_64
@@ -116,17 +141,20 @@ run0 bootc switch ghcr.io/declarative-dale/purplefin:development-desktop-x86_64
 ```
 
 Reboot after switching. Switching changes the complete tracked image; bootc
-does not combine a role tag with a separate hardware tag at installation time.
+does not combine a department tag with a separate hardware tag at installation
+time.
 
-The `latest` tag tracks the generic workstation image. Use the
-`dell-xps-9350-intel` tag for the full workstation plus Dell IPU7 image. The
-local `build-dell-no-ipu7` compatibility recipe produces the Dell no-camera
-test image. The full Dell camera profile uses the pinned
+The `latest` tag tracks the `base` + `generic-x86_64` image. The
+`dell-xps-9350-intel` tag tracks `support` + Dell IPU7. The local
+`build-dell-no-ipu7` compatibility recipe produces the `support` + Dell
+no-camera test image. The full Dell camera profile uses the pinned
 7.1.2 fallback only while Bluefin's kernel is older than 7.1.2, then follows
-Bluefin's kernel. Development and workstation images provide `packer`,
-`ansible`, `tofu`, and `bao`. The base role provides Git and Micro. Inherited
-Tailscale packages, services, repositories, setup hooks, and user-facing tips
-are removed from every composition.
+Bluefin's kernel. The reusable `devops` component provides Ghostty, VSCodium,
+`packer`, `ansible`, `tofu`, and `bao`; both the support and development
+departments reference it. The base department provides Git, Micro, `qemu-img`,
+`qemu-tools`, and common QEMU image block backends.
+Inherited Tailscale packages, services, repositories, setup hooks, and
+user-facing tips are removed from every composition.
 Terra's Bitwarden packages are excluded so future DNF operations cannot
 reintroduce the desktop RPM after migration to Flatpak.
 
@@ -235,6 +263,35 @@ configure the account again if the existing AppImage settings are not imported.
 
 Both Dell profiles carry the non-camera policies below. Every hardware helper
 checks for `Dell Inc.` / `XPS 13 9350` DMI data before changing anything.
+
+### Lid-aware privilege authentication
+
+At the start of each new `sudo` or polkit authentication, the Dell policy reads
+systemd-logind's `LidClosed` property and cross-checks
+`/proc/acpi/button/lid/*/state` when the Dell ACPI state is available. A
+known-open lid uses the normal authselect-managed stack, including
+fingerprint-first authentication. Any reported closed or conflicting state—or
+the absence of an unambiguous open state—uses only the local Unix password.
+
+Because `run0` and `pkexec` authenticate through polkit, the same behavior
+applies to them and to graphical polkit prompts. Login and screen-unlock PAM
+services are unchanged. The lid is sampled when a new prompt begins; closing
+the lid does not replace an authentication method in a prompt that is already
+open, and cached sudo or polkit authorization may avoid a new prompt entirely.
+
+Inspect the state and force a fresh sudo prompt with:
+
+```bash
+busctl get-property \
+  org.freedesktop.login1 \
+  /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager \
+  LidClosed
+cat /proc/acpi/button/lid/*/state
+grep -H 'purplefin-dell-lid-auth' /etc/pam.d/{sudo,polkit-1}
+sudo -k
+sudo -v
+```
 
 ### Battery charging
 
@@ -388,33 +445,41 @@ non-working IPU7 inputs.
 
 ## What Is Tracked
 
-- Base → role → hardware composition with the selected role and hardware written
-  into image metadata.
+- Common foundation → department → hardware composition with the selected
+  department and hardware written into image metadata.
 - A shared base containing Git, Micro, Fedora's FUSE 2 runtime,
-  `wireguard-tools`, the NetworkManager connection editor, the complete Homebrew
+  `wireguard-tools`, the NetworkManager connection editor, `qemu-img`,
+  `qemu-tools`, common QEMU image block backends, the complete Homebrew
   `Brewfile`, branding, and common Flatpak preinstalls such as Bitwarden,
-  Nextcloud Desktop Client, Cameractrls, and Gear Lever.
+  Nextcloud Desktop Client, Cameractrls, and Gear Lever. Fedora's `qemu-img`
+  package supplies the core image tools; Fedora has no separate
+  `qemu-img-core` subpackage.
 - Bitwarden's verified desktop Flatpak, update timer, polkit policy, legacy RPM
   migration, and official native CLI wrapped in a Purplefin-built RPM from a
   pinned archive and SHA-256 digest.
 - A centralized first-boot rpm-ostree runner with ordered tasks and
   `/var/lib/purplefin/firstboot/*.done` markers. It stops when a task stages a
   deployment so later tasks run after the required reboot.
-- The support role's graphical-session-bound Espanso service and capability,
-  RustConn Flatpak, and optional PAM U2F policy.
-- The development role's Ghostty defaults, VSCodium Flatpak, Ansible, Packer,
-  OpenTofu, OpenBao, HashiCorp repository, and OpenBao state-directory policy.
-- The workstation role as the supported union of the support and development
-  workloads used by the legacy tags.
+- The reusable `devops` component's Ghostty defaults, VSCodium Flatpak,
+  Ansible, Packer, OpenTofu, OpenBao, HashiCorp repository, and OpenBao
+  state-directory policy; both support and development reference it.
+- The support department's graphical-session-bound Espanso service and
+  capability and RustConn Flatpak, in addition to the shared `devops`
+  component.
 - Removal of inherited Tailscale packages, enabled services, RPM repository
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
-- Dell XPS 9350 Intel DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD Performance profile, AC/battery internal-panel refresh policy, and one-time user-overridable ambient-brightness enablement.
-- Dell XPS 9350 Intel hardware files for fingerprint authentication.
+- Dell XPS 9350 Intel lid-aware password/fingerprint routing for sudo and
+  polkit, DMI-gated 75-80% UPower/Dell Custom charging, a laptop-safe TuneD
+  Performance profile, AC/battery internal-panel refresh policy, and one-time
+  user-overridable ambient-brightness enablement.
+- A shared hardware-security baseline for every hardware profile, including
+  fingerprint authentication, PAM U2F/FIDO2, YubiKey management, and smart-card
+  services.
 - Dell XPS 9350 Intel rEFInd Regular Dark theme staging plus an idempotent boot-time installer that enables it when `/boot/efi/EFI/refind/refind.conf` is present.
-- Optional support-role PAM U2F support for security keys. User-specific key
-  mappings are not included; register a key after switching with
-  `pamu2fcfg > ~/.config/Yubico/u2f_keys`.
+- User-specific PAM U2F key mappings are not included. After switching, create
+  the configuration directory and register a key with
+  `mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`.
 
 ## What Is Not Tracked
 

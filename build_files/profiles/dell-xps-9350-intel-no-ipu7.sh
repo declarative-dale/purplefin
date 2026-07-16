@@ -8,8 +8,6 @@ kernel_default_evr="7.1.2-355.vanilla.fc44"
 
 # shellcheck source=/tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
 source /tmp/purplefin-build/profiles/lib/dell-xps-9350-common.sh
-# shellcheck source=/tmp/purplefin-build/profiles/lib/authselect-features.sh
-source /tmp/purplefin-build/profiles/lib/authselect-features.sh
 
 kernel_runtime_packages=(
 	kernel
@@ -241,7 +239,12 @@ install_mainline_7_1_kernel() {
 }
 
 echo ":: Applying Dell XPS 9350 Intel no-camera test overlay"
+copy_profile_file "etc/pam.d/polkit-1"
+copy_profile_file "etc/pam.d/purplefin-dell-lid-auth"
+copy_profile_file "etc/pam.d/purplefin-dell-password-auth"
+copy_profile_file "etc/pam.d/sudo"
 copy_profile_file "usr/libexec/purplefin/install-refind-theme"
+copy_profile_file "usr/libexec/purplefin/dell-lid-is-open"
 copy_profile_file "usr/lib/systemd/system/purplefin-refind-theme.service"
 copy_profile_tree "usr/share/purplefin/refind"
 copy_profile_file "usr/lib/purplefin/dell-xps-9350-battery.conf"
@@ -263,7 +266,3 @@ purplefin_configure_dell_xps_9350_common
 
 echo ":: Enabling Dell XPS 9350 Intel rEFInd theme installer"
 systemctl enable purplefin-refind-theme.service
-
-echo ":: Ensuring fingerprint stack is present"
-dnf5 -y install fprintd libfprint
-purplefin_authselect_request with-fingerprint

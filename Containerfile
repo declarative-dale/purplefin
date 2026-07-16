@@ -3,8 +3,8 @@ ARG BASE_TAG=stable
 
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
-ARG BUILD_PROFILE=generic-x86_64
-ARG BUILD_ROLE=workstation
+ARG BUILD_PROFILE=base-generic
+ARG BUILD_ROLE=base
 ARG IMAGE_NAME=purplefin
 ARG IMAGE_VENDOR=declarative-dale
 ARG PURPLEFIN_DELL_IPU7_KERNEL_EVR=
@@ -14,7 +14,7 @@ ARG PURPLEFIN_DELL_MAINLINE_KERNEL_ALLOW_UNPINNED=0
 ARG PURPLEFIN_OSTREE_LINUX=
 
 LABEL org.opencontainers.image.title="Purplefin"
-LABEL org.opencontainers.image.description="A custom Bluefin image with selectable hardware profiles"
+LABEL org.opencontainers.image.description="A custom Bluefin image with composable named profiles"
 LABEL org.opencontainers.image.vendor="${IMAGE_VENDOR}"
 LABEL org.opencontainers.image.source="https://github.com/declarative-dale/purplefin"
 LABEL org.opencontainers.image.base.name="${BASE_IMAGE}:${BASE_TAG}"

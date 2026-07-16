@@ -34,6 +34,9 @@ purplefin_authselect_finalize() {
 			find "${purplefin_authselect_state_dir}" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort
 		)
 	fi
+	# Requests are now held in memory. Remove build-only marker state before
+	# authselect runs so both successful and failed finalization leave /tmp clean.
+	rm -rf "${purplefin_authselect_state_dir}"
 
 	if ((${#requested_features[@]} == 0)); then
 		echo ":: No role or hardware authselect features requested"

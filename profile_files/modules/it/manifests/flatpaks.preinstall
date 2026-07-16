@@ -1,0 +1,3 @@
+[Flatpak Preinstall com.rustdesk.RustDesk]
+Branch=stable
+IsRuntime=false
