@@ -335,6 +335,8 @@ check:
     test -x tests/cosmic-vm-smoke.sh
     bash -n tests/cosmic-session-smoke.sh
     bash -n tests/cosmic-vm-smoke.sh
+    ! grep -qF 'podman pull --retry' tests/cosmic-vm-smoke.sh
+    grep -qF 'pull_attempt <= 5' tests/cosmic-vm-smoke.sh
     ! rg -q 'ghcr.io/ublue-os/bluefin(:|\b)' Containerfile image-template.env README.md Justfile .github/workflows
     ! rg -q 'actions/checkout@v4|redhat-actions/(buildah-build|podman-login|push-to-registry)' .github/workflows
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh

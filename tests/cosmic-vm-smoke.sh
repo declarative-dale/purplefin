@@ -46,7 +46,17 @@ key = "${public_key}"
 groups = ["wheel"]
 EOF
 
-podman pull --retry=5 "${image_ref}"
+for ((pull_attempt = 1; pull_attempt <= 5; pull_attempt += 1)); do
+	if podman pull "${image_ref}"; then
+		break
+	fi
+	if ((pull_attempt == 5)); then
+		echo "Failed to pull ${image_ref} after ${pull_attempt} attempts" >&2
+		exit 1
+	fi
+	echo "Retrying ${image_ref} pull (${pull_attempt}/5)" >&2
+	sleep 5
+done
 podman run \
 	--rm \
 	--privileged \
