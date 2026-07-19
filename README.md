@@ -3,7 +3,7 @@
 Purplefin is a custom Universal Blue image based on Bluefin:
 
 ```text
-ghcr.io/ublue-os/bluefin:stable
+ghcr.io/projectbluefin/bluefin:stable
 ```
 
 The image is built from this repository and published to:
@@ -18,7 +18,9 @@ Purplefin's public build input is a named `BUILD_PROFILE`. Each profile is an
 ordered list of reusable modules and exactly one hardware module. The primary
 profiles are `base-generic`, `dale`, and `dale-cosmic`; Dale combines base,
 sales, trainer, support, and Dell XPS 13 9350 Intel/IPU7 hardware, while
-`dale-cosmic` adds Fedora's COSMIC desktop and makes it the default session.
+`dale-cosmic` adds Fedora's focused `cosmic-desktop` and
+`cosmic-desktop-apps` groups and makes COSMIC the default GDM session while
+retaining GNOME for recovery.
 Legacy `BUILD_ROLE` plus
 hardware-valued `BUILD_PROFILE` inputs remain available for migration.
 
@@ -117,7 +119,7 @@ kernel label into the derived image. For an equivalent direct build, resolve
 that value first:
 
 ```bash
-base_kernel="$(skopeo inspect docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
+base_kernel="$(skopeo inspect docker://ghcr.io/projectbluefin/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
 target_kernel="$(build_files/select-ostree-linux.sh dell-xps-9350-intel "${base_kernel}")"
 podman build \
   --build-arg BUILD_ROLE=support \
@@ -508,3 +510,9 @@ control files.
 ```bash
 just check
 ```
+
+On non-pull-request builds, CI also converts the published `dale-cosmic` image
+to a disposable QCOW2 VM, boots it under QEMU, performs a GDM automatic login,
+and verifies a Wayland session with the COSMIC compositor. The host-side flow
+is in `tests/cosmic-vm-smoke.sh`; the in-guest assertions are in
+`tests/cosmic-session-smoke.sh`.

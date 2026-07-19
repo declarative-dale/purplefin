@@ -49,7 +49,7 @@ jobs:
         id: kernel
         shell: bash
         run: |
-          base_kernel="$(skopeo inspect --retry-times 3 docker://ghcr.io/ublue-os/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
+          base_kernel="$(skopeo inspect --retry-times 3 docker://ghcr.io/projectbluefin/bluefin:stable | jq -er '.Labels["ostree.linux"]')"
           target_kernel="$(build_files/select-ostree-linux.sh '${{ matrix.profile }}' "${base_kernel}")"
           echo "release=${target_kernel}" >> "${GITHUB_OUTPUT}"
 
@@ -67,7 +67,7 @@ jobs:
             --file ./Containerfile \
             --label "ostree.linux=${PURPLEFIN_OSTREE_LINUX}" \
             --build-arg "BUILD_PROFILE=${BUILD_PROFILE}" \
-            --build-arg BASE_IMAGE=ghcr.io/ublue-os/bluefin \
+            --build-arg BASE_IMAGE=ghcr.io/projectbluefin/bluefin \
             --build-arg BASE_TAG=stable \
             --build-arg "PURPLEFIN_OSTREE_LINUX=${PURPLEFIN_OSTREE_LINUX}" \
             --format docker \
@@ -127,3 +127,24 @@ jobs:
           registry_auth_file="${REGISTRY_AUTH_FILE:-${HOME}/.docker/config.json}"
           podman logout --authfile "${registry_auth_file}" "${REGISTRY}" || true
           rm -f "${registry_auth_file}"
+
+  cosmic-smoke:
+    name: Boot and log in to COSMIC
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install VM runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes openssh-client ovmf qemu-system-x86
+
+      - name: Boot image and verify COSMIC login
+        env:
+          COSMIC_SMOKE_IMAGE: ghcr.io/${{ github.repository }}:dale-cosmic
+        run: sudo tests/cosmic-vm-smoke.sh "${COSMIC_SMOKE_IMAGE}"

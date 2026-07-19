@@ -357,11 +357,12 @@ date:
   [kernel-vanilla stable repository](https://download.copr.fedorainfracloud.org/results/@kernel-vanilla/stable/fedora-44-x86_64/repodata/repomd.xml)
   contained one coherent runtime/devel set:
   `7.1.2-355.vanilla.fc44`. Its primary metadata contained no 7.1.3 package.
-- A 2026-07-13 inspection of `ghcr.io/ublue-os/bluefin:stable` reported
-  `ostree.linux=7.0.12-201.fc44.x86_64`, so it did not supply inherited 7.1.3.
-- Even if a coherent 7.1.3 set becomes available later, it remains on the
-  profile's external, unsigned CVS path and therefore cannot satisfy this
-  Secure Boot runbook.
+- A 2026-07-19 inspection of `ghcr.io/projectbluefin/bluefin:stable` reported
+  `ostree.linux=7.1.3-201.fc44.x86_64`. Purplefin therefore keeps that inherited
+  kernel under its 7.1.2-or-newer handoff policy instead of using the pinned
+  7.1.2 fallback.
+- The inherited 7.1.3 kernel still uses the profile's external, unsigned CVS
+  module path and therefore cannot satisfy this Secure Boot runbook.
 
 The currently available recovery target remains the tested, pinned 7.1.2
 deployment with Secure Boot disabled. Reassess repository availability and

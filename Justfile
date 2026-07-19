@@ -101,6 +101,12 @@ check:
     grep -qF 'profile_definition="${build_root}/profiles/profiles/${profile}.conf"' build_files/build.sh
     grep -qF 'modules=(base sales trainer support hardware-dell-xps-9350-intel)' build_files/profiles/profiles/dale.conf
     grep -qF 'modules=(base sales trainer support cosmic hardware-dell-xps-9350-intel)' build_files/profiles/profiles/dale-cosmic.conf
+    grep -qF 'dnf5 -y install @cosmic-desktop @cosmic-desktop-apps' build_files/modules/cosmic.sh
+    ! grep -qF '@cosmic-desktop-environment' build_files/modules/cosmic.sh
+    grep -qF 'ARG BASE_IMAGE=ghcr.io/projectbluefin/bluefin' Containerfile
+    test "$(grep -c '^ARG BASE_IMAGE' Containerfile)" -eq 2
+    test "$(grep -c '^ARG BASE_TAG' Containerfile)" -eq 2
+    grep -qF 'org.opencontainers.image.base.name="${BASE_IMAGE}:${BASE_TAG}"' Containerfile
     grep -qF 'Profile ${profile} must include exactly one hardware module' build_files/build.sh
     grep -qF 'printf '\''%s\n'\'' "${modules[@]}" > /usr/share/purplefin/build-modules' build_files/build.sh
     grep -qF 'purplefin_authselect_finalize' build_files/build.sh
@@ -323,6 +329,13 @@ check:
     grep -qF 'podman login' .github/workflows/build.yml
     grep -qF 'podman push' .github/workflows/build.yml
     grep -qF 'REGISTRY_AUTH_FILE=' .github/workflows/build.yml
+    grep -qF 'name: Boot and log in to COSMIC' .github/workflows/build.yml
+    grep -qF 'sudo tests/cosmic-vm-smoke.sh "${COSMIC_SMOKE_IMAGE}"' .github/workflows/build.yml
+    test -x tests/cosmic-session-smoke.sh
+    test -x tests/cosmic-vm-smoke.sh
+    bash -n tests/cosmic-session-smoke.sh
+    bash -n tests/cosmic-vm-smoke.sh
+    ! rg -q 'ghcr.io/ublue-os/bluefin(:|\b)' Containerfile image-template.env README.md Justfile .github/workflows
     ! rg -q 'actions/checkout@v4|redhat-actions/(buildah-build|podman-login|push-to-registry)' .github/workflows
     ! grep -qF 'dracut --force "${kernel_modules_dir}/initramfs.img" "${kernel_version}"' build_files/build.sh
     grep -qF 'rm -f /boot/symvers-*.xz' build_files/build.sh
@@ -643,7 +656,7 @@ check:
 _build profile tag:
     #!/usr/bin/env bash
     set -euo pipefail
-    base_image='ghcr.io/ublue-os/bluefin:stable'
+    base_image='ghcr.io/projectbluefin/bluefin:stable'
     base_kernel="$(skopeo inspect --retry-times 3 "docker://${base_image}" | jq -er '.Labels["ostree.linux"]')"
     target_kernel="$(build_files/select-ostree-linux.sh '{{ profile }}' "${base_kernel}")"
     podman build \

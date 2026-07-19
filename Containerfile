@@ -1,8 +1,10 @@
-ARG BASE_IMAGE=ghcr.io/ublue-os/bluefin
+ARG BASE_IMAGE=ghcr.io/projectbluefin/bluefin
 ARG BASE_TAG=stable
 
 FROM ${BASE_IMAGE}:${BASE_TAG}
 
+ARG BASE_IMAGE
+ARG BASE_TAG
 ARG BUILD_PROFILE=base-generic
 ARG BUILD_ROLE=base
 ARG IMAGE_NAME=purplefin
