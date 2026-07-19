@@ -85,13 +85,13 @@ check:
     test -e "${firstboot_test}/pending-markers/40-pending.done"
 
     # Named profiles compose ordered reusable modules and retain a legacy path.
-    for profile in base-generic base-dell-xps-9350-intel sales-generic sales-dell-xps-9350-intel support-generic support-dell-xps-9350-intel dale developer-generic trainer-generic executive-generic it-generic; do
+    for profile in base-generic base-dell-xps-9350-intel sales-generic sales-dell-xps-9350-intel support-generic support-dell-xps-9350-intel dale dale-cosmic developer-generic trainer-generic executive-generic it-generic; do
         test -f "build_files/profiles/profiles/${profile}.conf"
         bash -n "build_files/profiles/profiles/${profile}.conf"
     done
 
     tests/installer-selector.sh
-    for module in base developer support sales trainer executive it hardware-generic-x86_64 hardware-framework-laptop hardware-dell-xps-9350-intel; do
+    for module in base developer support sales trainer executive it cosmic hardware-generic-x86_64 hardware-framework-laptop hardware-dell-xps-9350-intel; do
         test -x "build_files/modules/${module}.sh"
     done
     grep -qF 'ARG BUILD_ROLE=base' Containerfile
@@ -100,6 +100,7 @@ check:
     grep -qF '/tmp/purplefin-build/build.sh "${BUILD_PROFILE}" "${BUILD_ROLE}"' Containerfile
     grep -qF 'profile_definition="${build_root}/profiles/profiles/${profile}.conf"' build_files/build.sh
     grep -qF 'modules=(base sales trainer support hardware-dell-xps-9350-intel)' build_files/profiles/profiles/dale.conf
+    grep -qF 'modules=(base sales trainer support cosmic hardware-dell-xps-9350-intel)' build_files/profiles/profiles/dale-cosmic.conf
     grep -qF 'Profile ${profile} must include exactly one hardware module' build_files/build.sh
     grep -qF 'printf '\''%s\n'\'' "${modules[@]}" > /usr/share/purplefin/build-modules' build_files/build.sh
     grep -qF 'purplefin_authselect_finalize' build_files/build.sh
@@ -289,11 +290,12 @@ check:
     test "$(build_files/select-ostree-linux.sh dell-xps-9350-intel 7.1.2-200.fc44.x86_64)" = '7.1.2-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh dell-xps-9350-intel 7.1.3-200.fc44.x86_64)" = '7.1.3-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh dell-xps-9350-intel 7.2.0-200.fc44.x86_64)" = '7.2.0-200.fc44.x86_64'
+    test "$(build_files/select-ostree-linux.sh dale-cosmic 7.2.0-200.fc44.x86_64)" = '7.2.0-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh generic-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh desktop-x86_64 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     test "$(build_files/select-ostree-linux.sh lenovo-generic 7.0.11-200.fc44.x86_64)" = '7.0.11-200.fc44.x86_64'
     grep -qF 'BUILD_PROFILE=' .github/workflows/build.yml
-    test "$(grep -c '^          - profile:' .github/workflows/build.yml)" -eq 7
+    test "$(grep -c '^          - profile:' .github/workflows/build.yml)" -eq 8
     ci_matrix="$(awk '
         $1 == "-" && $2 == "profile:" { profile = $3 }
         $1 == "tags:" && profile != "" {
@@ -310,7 +312,8 @@ check:
         'sales-dell-xps-9350-intel|sales-dell-xps-9350-intel' \
         'support-generic|support-generic' \
         'support-dell-xps-9350-intel|support-dell-xps-9350-intel' \
-        'dale|dale dell-xps-9350-intel')"
+        'dale|dale dell-xps-9350-intel' \
+        'dale-cosmic|dale-cosmic')"
     grep -qF 'PURPLEFIN_OSTREE_LINUX=' .github/workflows/build.yml
     grep -qF 'ostree.linux=' .github/workflows/build.yml
     grep -qF 'steps.kernel.outputs.release' .github/workflows/build.yml

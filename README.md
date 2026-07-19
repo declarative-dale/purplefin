@@ -16,8 +16,10 @@ ghcr.io/declarative-dale/purplefin
 
 Purplefin's public build input is a named `BUILD_PROFILE`. Each profile is an
 ordered list of reusable modules and exactly one hardware module. The primary
-profiles are `base-generic` and `dale`; Dale combines base, sales, trainer,
-support, and Dell XPS 13 9350 Intel/IPU7 hardware. Legacy `BUILD_ROLE` plus
+profiles are `base-generic`, `dale`, and `dale-cosmic`; Dale combines base,
+sales, trainer, support, and Dell XPS 13 9350 Intel/IPU7 hardware, while
+`dale-cosmic` adds Fedora's COSMIC desktop and makes it the default session.
+Legacy `BUILD_ROLE` plus
 hardware-valued `BUILD_PROFILE` inputs remain available for migration.
 
 Reusable workload modules include `developer` (DevOps tooling plus Rust),

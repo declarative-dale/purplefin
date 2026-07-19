@@ -38,6 +38,8 @@ jobs:
             tags: support-dell-xps-9350-intel
           - profile: dale
             tags: dale dell-xps-9350-intel
+          - profile: dale-cosmic
+            tags: dale-cosmic
 
     steps:
       - name: Checkout
