@@ -114,6 +114,9 @@ check:
     # Base/common content is present in every named profile.
     test -f manifests/Brewfile
     grep -qF 'marp-cli' manifests/Brewfile
+    for formula in fzf neovim zsh-autosuggestions zsh-fast-syntax-highlighting zsh-history-substring-search zsh-vi-mode; do
+        grep -qxF "brew \"${formula}\"" manifests/Brewfile
+    done
     test -f manifests/flatpaks.preinstall
     for app_id in com.bitwarden.desktop it.mijorus.gearlever com.nextcloud.desktopclient.nextcloud hu.irl.cameractrls; do
         grep -qF "[Flatpak Preinstall ${app_id}]" manifests/flatpaks.preinstall
@@ -233,8 +236,65 @@ check:
     cmp -s "${ghostty_skel}" "${ghostty_shared}"
     grep -qx 'copy-on-select = clipboard' "${ghostty_skel}"
     grep -qx 'right-click-action = paste' "${ghostty_skel}"
+    grep -qx 'command = /usr/bin/zsh' "${ghostty_skel}"
     test -x "${devops_root}/system_files/usr/libexec/purplefin/install-ghostty-defaults"
     test -f "${devops_root}/system_files/usr/lib/systemd/user/purplefin-ghostty-defaults.service"
+    zsh_shared="${devops_root}/system_files/usr/share/purplefin/zsh"
+    for zsh_file in .zshenv .zshrc aliases.zsh bindings.zsh fzf.zsh plugins.zsh prompt.zsh starship.toml LICENSE; do
+        test -f "${zsh_shared}/${zsh_file}"
+    done
+    for zsh_file in "${zsh_shared}"/.zshenv "${zsh_shared}"/.zshrc "${zsh_shared}"/*.zsh; do
+        zsh -n "${zsh_file}"
+    done
+    grep -qF 'zsh-autosuggestions/zsh-autosuggestions.zsh' "${zsh_shared}/plugins.zsh"
+    grep -qF 'zsh-history-substring-search/zsh-history-substring-search.zsh' "${zsh_shared}/plugins.zsh"
+    grep -qF 'zsh-vi-mode.plugin.zsh' "${zsh_shared}/plugins.zsh"
+    grep -qF 'zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh' "${zsh_shared}/plugins.zsh"
+    ! grep -qF 'zplugin-update' "${zsh_shared}/plugins.zsh"
+    ! grep -qF 'git clone' "${zsh_shared}/plugins.zsh"
+    zsh_installer="${devops_root}/system_files/usr/libexec/purplefin/install-zsh-defaults"
+    zsh_configurer="${devops_root}/system_files/usr/libexec/purplefin/configure-zsh-defaults"
+    zsh_service="${devops_root}/system_files/usr/lib/systemd/user/purplefin-zsh-defaults.service"
+    test -x "${zsh_installer}"
+    test -x "${zsh_configurer}"
+    test -f "${zsh_service}"
+    ! grep -qF 'ConditionPathExists=' "${zsh_service}"
+    grep -qF '/usr/libexec/purplefin/configure-zsh-defaults' "${devops_component}"
+    grep -qF 'systemctl --global enable purplefin-zsh-defaults.service' "${devops_component}"
+
+    zsh_home="${tmpdir}/zsh-home"
+    env \
+        HOME="${zsh_home}" \
+        XDG_CONFIG_HOME="${zsh_home}/.config" \
+        XDG_STATE_HOME="${zsh_home}/.local/state" \
+        XDG_CACHE_HOME="${zsh_home}/.cache" \
+        PURPLEFIN_ZSH_DEFAULTS_SOURCE="${PWD}/${zsh_shared}" \
+        "${zsh_installer}"
+    diff -qr "${zsh_shared}" "${zsh_home}/.config/zsh"
+    cmp -s "${zsh_shared}/.zshenv" "${zsh_home}/.zshenv"
+    test -d "${zsh_home}/.local/state/zsh"
+    test -d "${zsh_home}/.cache/zsh"
+    printf '%s\n' '# user configuration' > "${zsh_home}/.config/zsh/.zshrc"
+    env \
+        HOME="${zsh_home}" \
+        XDG_CONFIG_HOME="${zsh_home}/.config" \
+        XDG_STATE_HOME="${zsh_home}/.local/state" \
+        XDG_CACHE_HOME="${zsh_home}/.cache" \
+        PURPLEFIN_ZSH_DEFAULTS_SOURCE="${PWD}/${zsh_shared}" \
+        "${zsh_installer}"
+    grep -qxF '# user configuration' "${zsh_home}/.config/zsh/.zshrc"
+
+    zshenv_test="${tmpdir}/zshenv-test"
+    install -d "${zshenv_test}"
+    touch "${zshenv_test}/zshenv" "${zshenv_test}/nested-zshenv"
+    for iteration in 1 2; do
+        PURPLEFIN_ZSHENV_PATHS="${zshenv_test}/zshenv:${zshenv_test}/nested-zshenv" "${zsh_configurer}"
+    done
+    for zshenv_file in "${zshenv_test}/zshenv" "${zshenv_test}/nested-zshenv"; do
+        test "$(grep -cF '# Purplefin zsh configuration' "${zshenv_file}")" -eq 1
+        grep -qF 'export ZDOTDIR="$XDG_CONFIG_HOME/zsh"' "${zshenv_file}"
+    done
+
     hashicorp_repo="${devops_root}/system_files/etc/yum.repos.d/hashicorp.repo"
     test -f "${hashicorp_repo}"
     grep -qx '\[hashicorp\]' "${hashicorp_repo}"

@@ -1,0 +1,9 @@
+[Unit]
+Description=Install Purplefin zsh defaults
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/purplefin/install-zsh-defaults
+
+[Install]
+WantedBy=default.target
