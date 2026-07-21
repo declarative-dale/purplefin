@@ -34,8 +34,13 @@ fi
 echo ":: Installing devops component applications"
 dnf5 -y install "${devops_packages[@]}"
 
-chmod 0755 /usr/libexec/purplefin/install-ghostty-defaults
+chmod 0755 \
+	/usr/libexec/purplefin/configure-zsh-defaults \
+	/usr/libexec/purplefin/install-ghostty-defaults \
+	/usr/libexec/purplefin/install-zsh-defaults
+/usr/libexec/purplefin/configure-zsh-defaults
 systemctl --global enable purplefin-ghostty-defaults.service
+systemctl --global enable purplefin-zsh-defaults.service
 
 for package in "${devops_packages[@]}"; do
 	rpm -q "${package}"
