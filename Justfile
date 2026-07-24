@@ -121,6 +121,7 @@ check:
     for app_id in com.bitwarden.desktop it.mijorus.gearlever com.nextcloud.desktopclient.nextcloud hu.irl.cameractrls; do
         grep -qF "[Flatpak Preinstall ${app_id}]" manifests/flatpaks.preinstall
     done
+    ! grep -qF '[Flatpak Preinstall io.github.mfat.sshpilot]' manifests/flatpaks.preinstall
     ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' manifests/flatpaks.preinstall
     ! grep -qF '[Flatpak Preinstall com.vscodium.codium]' manifests/flatpaks.preinstall
     for package in fuse fuse-libs git micro nm-connection-editor nm-connection-editor-desktop wireguard-tools; do
@@ -171,7 +172,7 @@ check:
     grep -qF "rpm -qf --qf '%{NAME}\\n' /usr/bin/bw" build_files/modules/base.sh
     grep -qF '### Migrating Bitwarden from the layered RPM' README.md
 
-    # Support owns Espanso and RustConn and references the shared devops component.
+    # Support owns Espanso and SSH Pilot and references the shared devops component.
     support_role=build_files/profiles/roles/support.sh
     support_root=profile_files/roles/support
     grep -qF '/tmp/purplefin-build/profiles/components/devops.sh' "${support_role}"
@@ -180,7 +181,8 @@ check:
     grep -qF 'setcap "cap_dac_override+p" "$(command -v espanso)"' "${support_role}"
     grep -qF 'systemctl --global enable espanso.service' "${support_role}"
     test -f "${support_root}/manifests/flatpaks.preinstall"
-    grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${support_root}/manifests/flatpaks.preinstall"
+    grep -qF '[Flatpak Preinstall io.github.mfat.sshpilot]' "${support_root}/manifests/flatpaks.preinstall"
+    ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${support_root}/manifests/flatpaks.preinstall"
     ! grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${support_root}/manifests/flatpaks.preinstall"
     test -f "${support_root}/system_files/usr/lib/systemd/user/espanso.service"
     espanso_unit="${support_root}/system_files/usr/lib/systemd/user/espanso.service"
@@ -228,6 +230,7 @@ check:
         grep -qxF "${package}" "${devops_rpms}"
     done
     grep -qF '[Flatpak Preinstall com.vscodium.codium]' "${devops_root}/manifests/flatpaks.preinstall"
+    ! grep -qF '[Flatpak Preinstall io.github.mfat.sshpilot]' "${devops_root}/manifests/flatpaks.preinstall"
     ! grep -qF '[Flatpak Preinstall io.github.totoshko88.RustConn]' "${devops_root}/manifests/flatpaks.preinstall"
     ghostty_skel="${devops_root}/system_files/etc/skel/.config/ghostty/config.ghostty"
     ghostty_shared="${devops_root}/system_files/usr/share/purplefin/ghostty/config.ghostty"

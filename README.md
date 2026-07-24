@@ -25,7 +25,7 @@ Legacy `BUILD_ROLE` plus
 hardware-valued `BUILD_PROFILE` inputs remain available for migration.
 
 Reusable workload modules include `developer` (DevOps tooling plus Rust),
-`sales` (Thunderbird), `support` (Espanso and RustConn), `trainer` (Grist
+`sales` (Thunderbird), `support` (Espanso and SSH Pilot), `trainer` (Grist
 Firefox launcher), `executive` (Vates Notes Firefox launcher), and `it`
 (RustDesk). The Framework hardware module is intentionally a no-tuning
 scaffold until model-specific settings are validated.
@@ -57,7 +57,7 @@ selection interface and image-builder requirements.
 | Department | Workload |
 | --- | --- |
 | `base` | Shared image foundation, including Git, Micro, and QEMU disk-image tooling. |
-| `support` | Base plus the shared `devops` component, Espanso, and RustConn. |
+| `support` | Base plus the shared `devops` component, Espanso, and SSH Pilot. |
 | `development` | Base plus the shared `devops` component. |
 
 | Reusable component | Workload | Referenced by |
@@ -482,8 +482,10 @@ non-working IPU7 inputs.
   Ansible, Packer, OpenTofu, OpenBao, HashiCorp repository, and OpenBao
   state-directory policy; both support and development reference it.
 - The support department's graphical-session-bound Espanso service and
-  capability and RustConn Flatpak, in addition to the shared `devops`
-  component.
+  capability and SSH Pilot Flatpak, in addition to the shared `devops`
+  component. SSH Pilot's GTK4 VTE terminal exposes live terminal text through
+  GTK accessibility APIs, allowing an Espanso match that invokes an AT-SPI
+  helper to inspect session contents without enabling terminal logs.
 - Removal of inherited Tailscale packages, enabled services, RPM repository
   configuration, setup hooks, and user-facing tips from every composition.
 - Dell XPS 9350 Intel conditional 7.1.2 fallback until Bluefin reaches that version, exact kernel OCI metadata, external CVS for 7.1.x, validated in-tree CVS for 7.2+, OV02C10 reprobe compatibility, stock Fedora libcamera integration, and WirePlumber filtering for raw IPU7 endpoints.
